@@ -122,15 +122,15 @@ The system SHALL provide LLM-based evaluation scorers using Fantasy providers.
 - THEN an LLM judges if output follows the guidelines
 - AND returns pass/fail with rationale
 
-#### Scenario: RelevanceToQuery scorer
+#### Scenario: Relevance scorer
 - GIVEN user query and actual output
-- WHEN RelevanceToQuery scorer is applied
+- WHEN Relevance scorer is applied
 - THEN an LLM judges if output is relevant to the query
 - AND returns relevance score with rationale
 
-#### Scenario: RetrievalGroundedness scorer
+#### Scenario: Groundedness scorer
 - GIVEN retrieved documents and actual output
-- WHEN RetrievalGroundedness scorer is applied
+- WHEN Groundedness scorer is applied
 - THEN an LLM judges if output is grounded in retrieved content
 - AND returns grounded/not_grounded with rationale
 

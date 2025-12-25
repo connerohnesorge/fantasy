@@ -7,10 +7,11 @@
 - [ ] 1.3 Create `proto/scalapb/scalapb.proto` stub for extension compatibility
 - [ ] 1.4 Download OpenTelemetry protos to `proto/opentelemetry/proto/`
 - [ ] 1.5 Download Google well-known types (timestamp, duration, field_mask)
-- [ ] 1.6 Add `gen/` to `.gitignore` (or decide to commit generated code)
+- [ ] 1.6 Add `gen/` to `.gitignore`
 
 ## 2. MLflow Proto Curation
 
+- [ ] 2.0 Clone MLflow repository (v3.8.0): `git clone --depth 1 --tag v3.8.0 https://github.com/mlflow/mlflow.git mlflow-ref/mlflow`
 - [ ] 2.1 Copy core protos from `mlflow-ref/mlflow/protos/` to `proto/mlflow/`
 - [ ] 2.2 Strip ScalaPB extensions and Databricks-specific options
 - [ ] 2.3 Create `service.proto` with trace messages (TraceInfoV3, Span, etc.)
@@ -50,7 +51,7 @@
 
 ## 5. Built-in Heuristic Scorers
 
-- [ ] 5.1 Create `eval/scorers/` subdirectory
+- [ ] 5.1 Implement heuristic scorers in `eval/scorer.go`
 - [ ] 5.2 Implement `ExactMatch` scorer (string equality)
 - [ ] 5.3 Implement `Contains` scorer (substring match)
 - [ ] 5.4 Implement `Regex` scorer (pattern matching)
@@ -65,8 +66,8 @@
 - [ ] 6.2 Define `JudgeConfig` with model, prompt template, output schema
 - [ ] 6.3 Implement `Correctness` scorer (answer accuracy)
 - [ ] 6.4 Implement `Guidelines` scorer (custom criteria)
-- [ ] 6.5 Implement `RelevanceToQuery` scorer
-- [ ] 6.6 Implement `RetrievalGroundedness` scorer
+- [ ] 6.5 Implement `Relevance` scorer
+- [ ] 6.6 Implement `Groundedness` scorer
 - [ ] 6.7 Implement `Conciseness` scorer
 - [ ] 6.8 Implement `ProfessionalTone` scorer
 - [ ] 6.9 Add structured output parsing for judge responses

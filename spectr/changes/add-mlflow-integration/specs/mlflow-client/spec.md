@@ -116,7 +116,7 @@ The system SHALL support MLflow trace API v3 operations.
 #### Scenario: Delete traces
 - GIVEN an experiment ID and deletion criteria
 - WHEN `client.DeleteTraces(ctx, experimentID, opts)` is called
-- THEN a POST request is made to `/api/2.0/mlflow/traces/delete-traces`
+- THEN a POST request is made to `/api/3.0/mlflow/traces/delete-traces`
 - AND the count of deleted traces is returned
 
 #### Scenario: Set trace tag
@@ -154,17 +154,17 @@ The system SHALL support MLflow scorer registration API.
 #### Scenario: Register scorer
 - GIVEN an experiment ID, scorer name, and serialized scorer
 - WHEN `client.RegisterScorer(ctx, experimentID, name, serialized)` is called
-- THEN a POST request is made to `/api/2.0/mlflow/scorers/register`
+- THEN a POST request is made to `/api/3.0/mlflow/scorers/register`
 - AND a new version is created with scorer ID
 
 #### Scenario: List scorers
 - GIVEN an experiment ID
 - WHEN `client.ListScorers(ctx, experimentID)` is called
-- THEN a GET request is made to `/api/2.0/mlflow/scorers/list`
+- THEN a GET request is made to `/api/3.0/mlflow/scorers/list`
 - AND latest versions of all scorers are returned
 
 #### Scenario: Get scorer
 - GIVEN an experiment ID, scorer name, and optional version
 - WHEN `client.GetScorer(ctx, experimentID, name, version)` is called
-- THEN a GET request is made to `/api/2.0/mlflow/scorers/get`
+- THEN a GET request is made to `/api/3.0/mlflow/scorers/get`
 - AND the scorer definition is returned

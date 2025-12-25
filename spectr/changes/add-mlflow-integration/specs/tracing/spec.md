@@ -63,13 +63,13 @@ The system SHALL capture comprehensive span attributes.
 - GIVEN a span with inputs
 - WHEN the span is created
 - THEN `mlflow.spanInputs` attribute contains JSON-serialized inputs
-- AND inputs are truncated if they exceed 10KB
+- AND inputs are truncated if they exceed 10,240 bytes
 
 #### Scenario: Output attributes
 - GIVEN a span completing with outputs
 - WHEN the span is ended
 - THEN `mlflow.spanOutputs` attribute contains JSON-serialized outputs
-- AND outputs are truncated if they exceed 10KB
+- AND outputs are truncated if they exceed 10,240 bytes
 
 #### Scenario: Token usage attributes
 - GIVEN an LLM span with usage information

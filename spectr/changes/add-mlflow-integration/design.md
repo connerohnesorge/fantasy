@@ -9,7 +9,7 @@ Fantasy is a Go library for building AI agents. Users need observability and eva
 - Teams evaluating agent quality systematically
 
 ### Constraints
-- Must work with OSS MLflow v3.5+ (no Databricks-specific features)
+- Must work with OSS MLflow v3.8+ (no Databricks-specific features)
 - Go-native implementation (no CGo, no Python dependencies)
 - Evaluation framework must work standalone (MLflow is optional backend)
 - Must not break existing Fantasy API
@@ -101,7 +101,7 @@ eval/
 **Pattern**:
 ```go
 agent := fantasy.NewAgent(model,
-    fantasy.WithTracing(mlflow.TracingConfig{
+    fantasy.WithTracing(tracing.Config{
         Client:       mlflowClient,
         ExperimentID: "my-experiment",
     }),
@@ -131,6 +131,14 @@ results := evaluator.Run(ctx, dataset, scorers,
 ### Risk: Proto Files Drift
 - **Risk**: MLflow updates protos, our copies become stale
 - **Mitigation**: Pin to MLflow version, document update process, add Taskfile target for proto sync
+- **Proto Update Workflow**:
+  1. Clone the MLflow repository at the desired version:
+     ```bash
+     git clone --depth 1 --tag v3.8.0 https://github.com/mlflow/mlflow.git mlflow-ref/mlflow
+     ```
+  2. Copy and curate protos from `mlflow-ref/mlflow/protos/` to `proto/mlflow/`
+  3. Strip ScalaPB extensions and regenerate Go code
+  4. Update version comment in `proto/buf.yaml` (e.g., `# MLflow v3.8.0`)
 
 ### Risk: protojson Edge Cases
 - **Risk**: protojson may not handle all MLflow JSON quirks
@@ -158,16 +166,16 @@ No migration needed - this is purely additive functionality.
 - Remove `WithTracing()` option to disable tracing
 - Evaluation framework works without MLflow export
 
-## Open Questions
+## Resolved Questions
 
 1. **Proto Versioning**: Should we track MLflow version in proto/buf.yaml comments?
-   - Proposal: Yes, add `# MLflow v3.5.0` comment to track source version
+   - **Resolved**: Yes, add `# MLflow v3.8.0` comment to track source version
 
 2. **Scorer Naming**: Should built-in scorers match MLflow Python names exactly?
-   - Proposal: Yes, for familiarity (`Correctness`, `Guidelines`, `RelevanceToQuery`)
+   - **Resolved**: No, use Go idiomatic names (`Correctness`, `Guidelines`, `Relevance`, `Groundedness`)
 
 3. **Dataset Format**: JSON vs YAML vs both for file-based datasets?
-   - Proposal: Start with JSON (matches MLflow), add YAML if requested
+   - **Resolved**: JSON only (matches MLflow format)
 
 ## Package Structure
 
@@ -200,17 +208,10 @@ fantasy/
 │   └── errors.go                   # API error types
 │
 ├── eval/                           # Evaluation framework
-│   ├── scorer.go                   # Scorer interface
-│   ├── scorers/                    # Built-in scorers
-│   │   ├── correctness.go
-│   │   ├── exact_match.go
-│   │   ├── guidelines.go
-│   │   ├── relevance.go
-│   │   ├── groundedness.go
-│   │   └── tool_trajectory.go
-│   ├── llm_judge.go                # LLM-as-judge base
+│   ├── scorer.go                   # Scorer interface + built-in scorers
 │   ├── dataset.go                  # Dataset types
 │   ├── evaluator.go                # Evaluation runner
+│   ├── llm_judge.go                # LLM-as-judge scorers
 │   └── mlflow_export.go            # Proto converters
 │
 └── tracing/                        # Tracing integration

@@ -8,12 +8,16 @@ Many agentic libraries (LangChain, DSPy, CrewAI) support pushing session content
 2. **Systematic Evaluation**: Run evaluations with datasets and scorers to measure agent quality
 3. **Production Monitoring**: Track agent behavior, detect regressions, collect feedback
 
-MLflow's GenAI platform (v3.5+) provides distributed tracing, evaluation scorers, and assessment APIs that enable all three use cases.
+MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers, and assessment APIs that enable all three use cases.
 
 ## What Changes
 
 ### 1. Proto-based Go Client Generation (`proto/`, `gen/`)
 
+- **NEW**: Clone MLflow repository (v3.8.0) to `mlflow-ref/` for proto source files
+  ```bash
+  git clone --depth 1 --tag v3.8.0 https://github.com/mlflow/mlflow.git mlflow-ref/mlflow
+  ```
 - **NEW**: Copy and curate MLflow protos from `mlflow-ref/mlflow/protos/`
 - **NEW**: Strip ScalaPB extensions for pure Go struct generation
 - **NEW**: Use Buf toolchain for proto compilation
@@ -34,7 +38,7 @@ MLflow's GenAI platform (v3.5+) provides distributed tracing, evaluation scorers
 - **NEW**: Full span hierarchy: Agent -> Step -> LLM call -> Tool execution
 - **NEW**: SpanTypes: AGENT, LLM, TOOL, CHAIN, RETRIEVER, etc.
 - **NEW**: Full message content in span attributes (`mlflow.spanInputs`, `mlflow.spanOutputs`)
-- **NEW**: Integration with Fantasy's existing callbacks (OnStepStart, OnStepFinish, OnToolCall)
+- **NEW**: Integration with Fantasy's existing callbacks (OnStepStart, OnStepFinish, OnToolCall, OnToolResult)
 - **NEW**: `WithTracing(config)` agent option to enable MLflow tracing
 
 ### 4. Evaluation Framework (`eval/`)
@@ -71,7 +75,7 @@ MLflow's GenAI platform (v3.5+) provides distributed tracing, evaluation scorers
 ## Scope Boundaries
 
 ### In Scope
-- OSS MLflow v3.5+ REST API support
+- OSS MLflow v3.8+ REST API support
 - Trace API v3 (`/api/3.0/mlflow/traces`)
 - Assessment API for scorer feedback
 - Experiment/Run API for organization
