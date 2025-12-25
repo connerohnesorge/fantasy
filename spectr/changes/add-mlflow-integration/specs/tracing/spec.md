@@ -20,33 +20,48 @@ The system SHALL provide a Tracer for creating MLflow-compatible traces and span
 - GIVEN an active trace
 - WHEN `tracer.EndTrace(ctx)` is called
 - THEN execution duration is calculated
-- AND state is set to OK or ERROR based on context
+- AND state is set based on AgentResult error status (see State Determination below)
 - AND the trace is sent to MLflow server
+
+#### Scenario: Trace state determination
+- GIVEN an agent execution completes
+- WHEN the final AgentResult is available
+- THEN state is set to ERROR if AgentResult.Error is non-nil
+- AND state is set to OK if AgentResult.Error is nil
+- AND state is set to ERROR if context was cancelled or timed out
 
 ### Requirement: Span Hierarchy
 
 The system SHALL create hierarchical spans matching agent execution structure.
 
+The span hierarchy follows: Agent -> Step -> (LLM | Tool)
+
+Note: LLM spans are inferred from step timing since Fantasy callbacks do not provide
+direct LLM call/result hooks. This approximation captures the primary LLM interaction
+per step but may not reflect retry attempts or multi-model scenarios.
+
 #### Scenario: Agent span
-- GIVEN an agent execution starts
+- GIVEN an agent execution starts via the tracing wrapper
 - WHEN the root span is created
 - THEN span type is set to AGENT
-- AND span name reflects the agent identity
+- AND span name is set to "agent" (or custom name from TracingConfig.AgentName)
 - AND span becomes parent for all child spans
 
 #### Scenario: Step span
 - GIVEN an agent step executes
 - WHEN a step span is created under the agent span
 - THEN span type is set to CHAIN
-- AND span name includes step number
+- AND span name includes step number (e.g., "step-1")
 - AND parent_span_id references the agent span
 
-#### Scenario: LLM span
-- GIVEN an LLM API call is made during a step
-- WHEN an LLM span is created
-- THEN span type is set to LLM
-- AND span name includes the model name
-- AND parent_span_id references the step span
+#### Scenario: LLM span (inferred)
+- GIVEN a step span is active
+- WHEN the step completes (OnStepFinish fires)
+- THEN an LLM span is created retroactively as child of step span
+- AND span type is set to LLM
+- AND span name includes the model name from TracingConfig.ModelName
+- AND span timing is derived from step start to step finish (approximation)
+- AND token usage is captured from step result if available
 
 #### Scenario: Tool span
 - GIVEN a tool is executed during a step
@@ -85,29 +100,42 @@ The system SHALL capture comprehensive span attributes.
 
 ### Requirement: Agent Callback Integration
 
-The system SHALL integrate with Fantasy's existing agent callbacks.
+The system SHALL integrate with Fantasy's existing agent callbacks via a tracing wrapper.
 
 #### Scenario: WithTracing option
 - GIVEN an agent configuration
-- WHEN `WithTracing(config)` option is applied
-- THEN tracing callbacks are registered automatically
-- AND no changes to agent code are required
+- WHEN `fantasy.WithTracing(config)` option is applied
+- THEN tracing is enabled via a call wrapper pattern
+- AND the wrapper intercepts Run/Stream calls to capture context
+- AND no changes to Fantasy's core API are required
 
-#### Scenario: OnAgentStart callback
-- GIVEN tracing is enabled
-- WHEN agent execution starts (OnAgentStart fires)
-- THEN a new trace and agent span are created
+#### Scenario: TracingConfig structure
+- GIVEN a tracing configuration
+- WHEN TracingConfig is created
+- THEN it contains: Client (*mlflowclient.Client), ExperimentID (string)
+- AND optional: AgentName (string), ModelName (string), SessionID (string), Tags (map[string]string)
+- AND SessionID defaults to a new UUID if not provided
+
+#### Scenario: Tracing wrapper initialization
+- GIVEN tracing is enabled via WithTracing(config)
+- WHEN agent.Run() or agent.Stream() is called
+- THEN the wrapper intercepts the call before delegating to the agent
+- AND creates a new trace with context from TracingConfig
+- AND captures the initial prompt from the call parameters
+- AND creates the root agent span
 
 #### Scenario: OnStepStart callback
 - GIVEN tracing is enabled and agent is running
 - WHEN a step starts (OnStepStart fires)
 - THEN a step span is created as child of agent span
 - AND step number is captured
+- AND step start timestamp is recorded for LLM span inference
 
 #### Scenario: OnStepFinish callback
 - GIVEN a step span is active
 - WHEN step completes (OnStepFinish fires)
-- THEN step span is ended
+- THEN an inferred LLM span is created with step timing
+- AND step span is ended
 - AND step result content is captured in outputs
 
 #### Scenario: OnToolCall callback
@@ -122,10 +150,11 @@ The system SHALL integrate with Fantasy's existing agent callbacks.
 - THEN tool span is ended
 - AND tool result is captured in outputs
 
-#### Scenario: OnAgentFinish callback
+#### Scenario: Tracing wrapper completion
 - GIVEN tracing is enabled and agent completes
-- WHEN agent finishes (OnAgentFinish fires)
-- THEN agent span is ended
+- WHEN the wrapped Run/Stream call returns
+- THEN the wrapper captures the AgentResult
+- AND agent span is ended with appropriate status
 - AND trace is finalized and sent to MLflow
 
 ### Requirement: Content Capture
@@ -166,9 +195,10 @@ The system SHALL attach relevant metadata to traces.
 - THEN trace_metadata includes the model identifier
 
 #### Scenario: Session metadata
-- GIVEN a session ID is provided
+- GIVEN a TracingConfig with optional SessionID
 - WHEN the trace is created
-- THEN trace_metadata includes `mlflow.sessionId`
+- THEN if SessionID was provided in config, trace_metadata includes `mlflow.trace.session` with that value
+- AND if SessionID was not provided, a new UUID v4 is generated and used
 
 #### Scenario: Custom tags
 - GIVEN custom tags in tracing config

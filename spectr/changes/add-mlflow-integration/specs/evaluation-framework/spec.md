@@ -4,18 +4,43 @@
 
 The system SHALL define a Scorer interface for evaluation criteria.
 
-#### Scenario: Scorer signature
-- GIVEN a Scorer implementation
-- WHEN the scorer is invoked
-- THEN it receives context, outputs, expectations, and optional trace
-- AND returns a Score with value, rationale, and metadata
+#### Scenario: Scorer interface definition
+- GIVEN the eval package
+- WHEN Scorer interface is defined
+- THEN it has the following Go signature:
+```go
+// Scorer evaluates outputs against expectations.
+type Scorer interface {
+    // Name returns the scorer's identifier.
+    Name() string
+
+    // Score evaluates the given input/output pair.
+    // ctx: context for cancellation/timeout
+    // input: ScorerInput containing outputs, expectations, and optional trace
+    // Returns: Score result or error
+    Score(ctx context.Context, input ScorerInput) (Score, error)
+}
+
+// ScorerInput contains all data needed for scoring.
+type ScorerInput struct {
+    Outputs      map[string]any  // Generated outputs to evaluate
+    Expectations map[string]any  // Expected values for comparison
+    Trace        *Trace          // Optional trace data (nil for scorers that don't need it)
+}
+```
 
 #### Scenario: Score types
 - GIVEN a scorer returning a result
 - WHEN the Score is created
-- THEN the value can be boolean, numeric (float64), or categorical (string)
-- AND rationale explains the scoring decision
-- AND metadata contains additional structured information
+- THEN it has the following structure:
+```go
+type Score struct {
+    Value     any             // bool, float64, or string
+    Rationale string          // Explanation of the score
+    Metadata  map[string]any  // Additional structured information
+}
+```
+- AND Value can be boolean (pass/fail), numeric (0.0-1.0), or categorical (string label)
 
 ### Requirement: Dataset Types
 
@@ -25,7 +50,21 @@ The system SHALL provide Dataset and TestCase types for evaluation inputs.
 - GIVEN a test case definition
 - WHEN the test case is created
 - THEN it contains inputs (map[string]any), expectations (map[string]any)
-- AND optionally pre-generated outputs and tags
+- AND optionally pre-generated outputs (map[string]any) and tags (map[string]string)
+
+#### Scenario: TestCase with pre-generated outputs
+- GIVEN a test case with Outputs field populated
+- WHEN the test case is evaluated
+- THEN the pre-generated outputs are used directly
+- AND no predict function is called for this test case
+- AND trace field is nil (no execution occurred)
+
+#### Scenario: TestCase without pre-generated outputs
+- GIVEN a test case with Outputs field nil or empty
+- WHEN the test case is evaluated
+- THEN a predict function MUST be provided via WithPredict()
+- AND the predict function generates outputs and optional trace
+- AND error is returned if no predict function is configured
 
 #### Scenario: Dataset structure
 - GIVEN a dataset definition
@@ -54,6 +93,15 @@ The system SHALL provide an Evaluator for running scorers against datasets.
 - THEN test cases are processed concurrently with up to 10 workers
 - AND results are collected and returned
 
+#### Scenario: Parallel evaluation semantics
+- GIVEN parallel evaluation is enabled
+- WHEN test cases are processed concurrently
+- THEN results are returned in original test case order (stable ordering)
+- AND if one test case fails, other test cases continue processing
+- AND context cancellation stops all pending test cases
+- AND each scorer receives its own goroutine per test case
+- AND errors are collected per test case, not propagated globally
+
 #### Scenario: Timeout handling
 - GIVEN a scorer that takes too long
 - WHEN evaluation runs with `WithTimeout(5*time.Second)`
@@ -62,9 +110,15 @@ The system SHALL provide an Evaluator for running scorers against datasets.
 
 #### Scenario: Predict function
 - GIVEN a dataset without pre-generated outputs
-- WHEN a predict function is provided
+- WHEN a predict function is provided via `WithPredict(fn PredictFunc)`
 - THEN the predict function is called for each test case to generate outputs
 - AND generated outputs are passed to scorers
+- AND the predict function signature is:
+```go
+// PredictFunc generates outputs from inputs.
+// Returns outputs map and optional trace for agent-specific scorers.
+type PredictFunc func(ctx context.Context, inputs map[string]any) (outputs map[string]any, trace *Trace, err error)
+```
 
 ### Requirement: Heuristic Scorers
 
@@ -88,7 +142,10 @@ The system SHALL provide built-in heuristic scorers.
 #### Scenario: JSONMatch scorer
 - GIVEN expected JSON structure and actual output
 - WHEN JSONMatch scorer is applied
-- THEN it returns true if structures are equivalent (ignoring whitespace)
+- THEN it returns true if structures are semantically equivalent
+- AND comparison ignores whitespace formatting
+- AND comparison ignores object key ordering
+- AND null values are considered equal to missing keys (optional: configurable)
 
 #### Scenario: NumericRange scorer
 - GIVEN min and max bounds and numeric output
@@ -100,6 +157,13 @@ The system SHALL provide built-in heuristic scorers.
 - WHEN ToolCallTrajectory scorer is applied
 - THEN it returns true if tool names match expected sequence in order
 
+#### Scenario: StepValidation scorer
+- GIVEN expected step count and validation rules
+- WHEN StepValidation scorer is applied
+- THEN it validates the agent completed within expected step range
+- AND optionally validates step content patterns via regex
+- AND returns true if all validations pass
+
 ### Requirement: LLM-as-Judge Scorers
 
 The system SHALL provide LLM-based evaluation scorers using Fantasy providers.
@@ -109,6 +173,16 @@ The system SHALL provide LLM-based evaluation scorers using Fantasy providers.
 - WHEN the scorer is configured
 - THEN it specifies the model, prompt template, and output schema
 - AND Fantasy's LanguageModel is used for inference
+- AND the configuration structure is:
+```go
+// JudgeConfig configures an LLM-as-judge scorer.
+type JudgeConfig struct {
+    Model          fantasy.LanguageModel  // Required: the LLM to use for judging
+    PromptTemplate string                 // Prompt template with {{.Input}}, {{.Output}}, etc.
+    OutputSchema   any                    // Expected structured output schema
+    Temperature    float64                // Model temperature (default: 0.0 for determinism)
+}
+```
 
 #### Scenario: Correctness scorer
 - GIVEN expected answer and actual output
@@ -137,8 +211,14 @@ The system SHALL provide LLM-based evaluation scorers using Fantasy providers.
 #### Scenario: Judge retry on failure
 - GIVEN an LLM API error during scoring
 - WHEN the judge scorer encounters the error
-- THEN it retries with exponential backoff
-- AND returns error score if all retries fail
+- THEN it retries with exponential backoff using default configuration:
+  - Maximum retries: 3
+  - Initial delay: 1 second
+  - Backoff multiplier: 2x
+  - Maximum delay: 10 seconds
+- AND retries are triggered for: rate limit errors (429), server errors (5xx), connection timeouts
+- AND retries are NOT triggered for: client errors (4xx except 429), validation errors
+- AND returns error score with rationale "LLM judge failed after 3 retries" if all retries fail
 
 ### Requirement: Evaluation Results
 

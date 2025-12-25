@@ -29,7 +29,7 @@ MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers
 
 - **NEW**: Thin REST client using protojson marshaling
 - **NEW**: Trace management (create, get, search, delete, tags)
-- **NEW**: Assessment management (create, update, delete)
+- **NEW**: Assessment management (create, update, delete) - Assessments are MLflow's way of attaching evaluation feedback (scores, rationales) to traces
 - **NEW**: Experiment/Run management
 - **NEW**: Scorer registration API
 
@@ -38,7 +38,7 @@ MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers
 - **NEW**: Full span hierarchy: Agent -> Step -> LLM call -> Tool execution
 - **NEW**: SpanTypes: AGENT, LLM, TOOL, CHAIN, RETRIEVER, etc.
 - **NEW**: Full message content in span attributes (`mlflow.spanInputs`, `mlflow.spanOutputs`)
-- **NEW**: Integration with Fantasy's existing callbacks (OnStepStart, OnStepFinish, OnToolCall, OnToolResult)
+- **NEW**: Integration with Fantasy's existing callbacks via tracing wrapper (captures context from Run/Stream calls, hooks OnStepStart, OnStepFinish, OnToolCall, OnToolResult)
 - **NEW**: `WithTracing(config)` agent option to enable MLflow tracing
 
 ### 4. Evaluation Framework (`eval/`)
@@ -46,10 +46,11 @@ MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers
 - **NEW**: Decoupled evaluation framework with own Go types
 - **NEW**: Go function scorers with `Scorer` interface
 - **NEW**: LLM-as-judge scorers using Fantasy's own providers
-- **NEW**: In-memory datasets with optional file-based loading (JSON/YAML)
+- **NEW**: In-memory datasets with optional file-based loading (JSON only)
 - **NEW**: Configurable parallelism (default sequential, opt-in parallel)
 - **NEW**: Converters to/from proto types for MLflow export
-- **NEW**: Built-in scorers: Correctness, ExactMatch, Guidelines, Relevance, Groundedness
+- **NEW**: Heuristic scorers: ExactMatch, Contains, Regex, JSONMatch, NumericRange
+- **NEW**: LLM-as-judge scorers: Correctness, Guidelines, Relevance, Groundedness
 - **NEW**: Agent-specific scorers: ToolCallTrajectory, StepValidation
 
 ## Impact

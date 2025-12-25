@@ -101,12 +101,18 @@ eval/
 **Pattern**:
 ```go
 agent := fantasy.NewAgent(model,
-    fantasy.WithTracing(tracing.Config{
+    fantasy.WithTracing(fantasy.TracingConfig{
         Client:       mlflowClient,
         ExperimentID: "my-experiment",
+        AgentName:    "my-agent",      // optional
+        ModelName:    "gpt-4",         // optional
+        SessionID:    "session-123",   // optional, auto-generated if not set
     }),
 )
 ```
+
+Note: `fantasy.WithTracing()` is in the fantasy package for consistency with other agent options.
+The tracing wrapper intercepts Run/Stream calls to capture context before delegating to the agent.
 
 ### Decision 5: Configurable Parallelism for Evaluation
 
@@ -152,6 +158,10 @@ results := evaluator.Run(ctx, dataset, scorers,
 - **Trade-off**: OTLP is more standard, but REST is simpler and documented
 - **Decision**: Use REST API with proto types; can add OTLP later if needed
 
+### Constraint: Span Attribute Size Limits
+- **Constraint**: MLflow limits span inputs/outputs to 10,240 bytes
+- **Decision**: Truncate span attributes that exceed limit with suffix "..."
+
 ## Migration Plan
 
 No migration needed - this is purely additive functionality.
@@ -187,7 +197,8 @@ fantasy/
 │   ├── mlflow/                     # Curated MLflow protos
 │   │   ├── service.proto           # Core trace/assessment messages
 │   │   ├── assessments.proto       # Assessment types
-│   │   └── experiments.proto       # Experiment/run messages
+│   │   ├── experiments.proto       # Experiment/run messages
+│   │   └── scorers.proto           # Scorer registration messages
 │   ├── opentelemetry/proto/        # OTel protos (downloaded)
 │   │   └── trace/v1/trace.proto
 │   └── scalapb/                    # Stub for ScalaPB options
@@ -197,15 +208,19 @@ fantasy/
 │   └── mlflow/
 │       ├── service.pb.go
 │       ├── assessments.pb.go
-│       └── experiments.pb.go
+│       ├── experiments.pb.go
+│       └── scorers.pb.go
 │
 ├── mlflowclient/                   # REST client package
 │   ├── client.go                   # HTTP client with protojson
+│   ├── options.go                  # Functional options pattern
 │   ├── traces.go                   # Trace API methods
+│   ├── runs.go                     # Run API methods (Create, Get, Update, LogBatch, Search)
 │   ├── experiments.go              # Experiment API methods
 │   ├── assessments.go              # Assessment API methods
 │   ├── scorers.go                  # Scorer registration API
-│   └── errors.go                   # API error types
+│   ├── tags.go                     # Tag operations (SetTraceTag, DeleteTraceTag, SetRunTag)
+│   └── errors.go                   # API error types (APIError)
 │
 ├── eval/                           # Evaluation framework
 │   ├── scorer.go                   # Scorer interface + built-in scorers

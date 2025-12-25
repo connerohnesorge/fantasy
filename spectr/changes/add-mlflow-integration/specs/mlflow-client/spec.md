@@ -1,5 +1,13 @@
 ## ADDED Requirements
 
+### API Version Strategy
+
+The client uses two API versions:
+- `/api/2.0/mlflow/` - Legacy endpoints for experiments, runs, and metrics (stable)
+- `/api/3.0/mlflow/` - Modern endpoints for traces, assessments, and scorers (v3.8+)
+
+Both versions use the same authentication and base URL. Version selection is automatic based on the operation.
+
 ### Requirement: Proto-based Code Generation
 
 The system SHALL generate Go structs from MLflow proto files using the Buf toolchain.
@@ -46,6 +54,24 @@ The system SHALL provide a REST client for MLflow API v3 operations.
 - GIVEN an API response with status code >= 400
 - WHEN the response is processed
 - THEN an APIError is returned with status code and body
+
+#### Scenario: APIError type definition
+- GIVEN the mlflowclient package
+- WHEN APIError is defined
+- THEN it has the following structure:
+```go
+// APIError represents an error response from the MLflow API.
+type APIError struct {
+    StatusCode int    // HTTP status code (e.g., 404, 500)
+    Message    string // Error message from response body
+    ErrorCode  string // MLflow error code (e.g., "RESOURCE_DOES_NOT_EXIST")
+}
+
+func (e *APIError) Error() string // Implements error interface
+```
+- AND IsNotFound() returns true for 404 status codes
+- AND IsConflict() returns true for 409 status codes
+- AND IsServerError() returns true for 5xx status codes
 
 ### Requirement: Experiment Management
 
@@ -95,9 +121,28 @@ The system SHALL support MLflow run CRUD and logging operations.
 
 The system SHALL support MLflow trace API v3 operations.
 
+#### Scenario: Trace type definition
+- GIVEN the tracing package
+- WHEN the Trace type is defined
+- THEN it wraps the generated `gen/mlflow.TraceInfoV3` proto type
+- AND provides a builder API for constructing traces:
+```go
+// Trace wraps TraceInfoV3 with builder methods.
+type Trace struct {
+    proto *mlflow.TraceInfoV3
+}
+
+// TraceBuilder creates traces incrementally.
+type TraceBuilder struct {
+    trace *Trace
+    spans []*Span
+}
+```
+- AND the client accepts `*Trace` for API operations
+
 #### Scenario: Start trace
-- GIVEN trace info with experiment location
-- WHEN `client.StartTrace(ctx, trace)` is called
+- GIVEN a Trace with experiment location
+- WHEN `client.StartTrace(ctx, trace *Trace)` is called
 - THEN a POST request is made to `/api/3.0/mlflow/traces`
 - AND the trace is created with the provided spans
 
@@ -124,6 +169,18 @@ The system SHALL support MLflow trace API v3 operations.
 - WHEN `client.SetTraceTag(ctx, traceID, key, value)` is called
 - THEN a PATCH request is made to `/api/3.0/mlflow/traces/{trace_id}/tags`
 - AND the tag is set on the trace
+
+#### Scenario: Delete trace tag
+- GIVEN a trace ID and tag key
+- WHEN `client.DeleteTraceTag(ctx, traceID, key)` is called
+- THEN a DELETE request is made to `/api/3.0/mlflow/traces/{trace_id}/tags/{key}`
+- AND the tag is removed from the trace
+
+#### Scenario: Set run tag
+- GIVEN a run ID, key, and value
+- WHEN `client.SetRunTag(ctx, runID, key, value)` is called
+- THEN a POST request is made to `/api/2.0/mlflow/runs/set-tag`
+- AND the tag is set on the run
 
 ### Requirement: Assessment Management
 
@@ -167,4 +224,5 @@ The system SHALL support MLflow scorer registration API.
 - GIVEN an experiment ID, scorer name, and optional version
 - WHEN `client.GetScorer(ctx, experimentID, name, version)` is called
 - THEN a GET request is made to `/api/3.0/mlflow/scorers/get`
+- AND if version is empty string or 0, the latest version is returned
 - AND the scorer definition is returned

@@ -58,7 +58,8 @@
 - [ ] 5.5 Implement `JSONMatch` scorer (structural comparison)
 - [ ] 5.6 Implement `NumericRange` scorer (value in range)
 - [ ] 5.7 Implement `ToolCallTrajectory` scorer (tool sequence validation)
-- [ ] 5.8 Add unit tests for all heuristic scorers
+- [ ] 5.8 Implement `StepValidation` scorer (step count and content validation)
+- [ ] 5.9 Add unit tests for all heuristic scorers
 
 ## 6. LLM-as-Judge Scorers
 
@@ -68,11 +69,9 @@
 - [ ] 6.4 Implement `Guidelines` scorer (custom criteria)
 - [ ] 6.5 Implement `Relevance` scorer
 - [ ] 6.6 Implement `Groundedness` scorer
-- [ ] 6.7 Implement `Conciseness` scorer
-- [ ] 6.8 Implement `ProfessionalTone` scorer
-- [ ] 6.9 Add structured output parsing for judge responses
-- [ ] 6.10 Add retry logic for LLM API failures
-- [ ] 6.11 Add unit tests with mocked LLM responses
+- [ ] 6.7 Add structured output parsing for judge responses
+- [ ] 6.8 Add retry logic for LLM API failures (3 retries, 1s initial, 2x backoff, 10s max)
+- [ ] 6.9 Add unit tests with mocked LLM responses
 
 ## 7. MLflow Export for Evaluation
 
@@ -88,14 +87,14 @@
 
 - [ ] 8.1 Create `tracing/` package scaffold
 - [ ] 8.2 Implement `Tracer` type with span creation methods
-- [ ] 8.3 Implement span hierarchy: Agent -> Step -> LLM -> Tool
+- [ ] 8.3 Implement span hierarchy: Agent -> Step -> (LLM inferred) -> Tool
 - [ ] 8.4 Define span attribute keys (mlflow.spanInputs, mlflow.spanOutputs, etc.)
-- [ ] 8.5 Implement `callbacks.go` with Fantasy callback integration
-- [ ] 8.6 Create `WithTracing(config)` agent option in `options.go`
-- [ ] 8.7 Hook OnStepStart/OnStepFinish for step spans
-- [ ] 8.8 Hook OnToolCall/OnToolResult for tool spans
-- [ ] 8.9 Hook OnTextDelta/OnReasoningDelta for content capture
-- [ ] 8.10 Implement automatic trace flush on agent completion
+- [ ] 8.5 Implement `TracingConfig` struct with Client, ExperimentID, AgentName, ModelName, SessionID, Tags
+- [ ] 8.6 Implement tracing wrapper that intercepts Run/Stream calls
+- [ ] 8.7 Create `fantasy.WithTracing(config)` agent option
+- [ ] 8.8 Hook OnStepStart/OnStepFinish for step spans and inferred LLM spans
+- [ ] 8.9 Hook OnToolCall/OnToolResult for tool spans
+- [ ] 8.10 Implement automatic trace flush on wrapper completion
 - [ ] 8.11 Add unit tests for span generation
 - [ ] 8.12 Add integration test with real agent execution
 
@@ -121,7 +120,7 @@
 - Tasks 3.x depend on 2.x (client needs generated types)
 - Tasks 4.x-6.x can be parallelized (eval framework is independent)
 - Tasks 7.x depend on 3.x and 4.x (export needs client and eval types)
-- Tasks 8.x depend on 3.x (tracing needs client)
+- Tasks 8.x depend on 2.x (tracing needs proto types for Trace/Span) and 3.x (tracing needs client)
 - Tasks 9.x and 10.x are final validation
 
 ## Parallelizable Work
