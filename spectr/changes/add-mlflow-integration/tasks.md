@@ -7,7 +7,7 @@
 - [ ] 1.3 Create `proto/scalapb/scalapb.proto` stub for extension compatibility
 - [ ] 1.4 Download OpenTelemetry protos to `proto/opentelemetry/proto/`
 - [ ] 1.5 Download Google well-known types to `proto/google/protobuf/` (timestamp.proto, duration.proto, struct.proto, any.proto, field_mask.proto)
-- [ ] 1.6 Add `gen/` to `.gitignore`
+- [ ] 1.6 Add `proto/gen/` to `.gitignore`
 - [ ] 1.7 Add Taskfile task `proto:sync` to update protos from mlflow-ref (documented in design)
 
 ## 2. MLflow Proto Curation

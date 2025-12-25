@@ -258,15 +258,14 @@ fantasy/
 │   │   └── scorers.proto           # Scorer registration messages
 │   ├── opentelemetry/proto/        # OTel protos (downloaded)
 │   │   └── trace/v1/trace.proto
-│   └── scalapb/                    # Stub for ScalaPB options
-│       └── scalapb.proto
-│
-├── gen/                            # Generated code (git-ignored)
-│   └── mlflow/
-│       ├── service.pb.go
-│       ├── assessments.pb.go
-│       ├── experiments.pb.go
-│       └── scorers.pb.go
+│   ├── scalapb/                    # Stub for ScalaPB options
+│   │   └── scalapb.proto
+│   └── gen/                        # Generated code (git-ignored)
+│       └── mlflow/
+│           ├── service.pb.go
+│           ├── assessments.pb.go
+│           ├── experiments.pb.go
+│           └── scorers.pb.go
 │
 ├── mlflowclient/                   # REST client package
 │   ├── client.go                   # HTTP client with protojson

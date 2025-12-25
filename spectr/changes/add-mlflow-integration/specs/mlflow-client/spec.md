@@ -67,7 +67,7 @@ The system SHALL generate Go structs from MLflow proto files using the Buf toolc
 #### Scenario: Proto generation workflow
 - GIVEN the `proto/mlflow/` directory contains curated MLflow protos
 - WHEN `task proto:gen` is executed
-- THEN Go code is generated to `gen/mlflow/` package
+- THEN Go code is generated to `proto/gen/mlflow/` package
 - AND all generated types compile successfully
 
 #### Scenario: OpenTelemetry span types
@@ -345,7 +345,7 @@ The system SHALL support MLflow trace API v3 operations.
 #### Scenario: Trace type for API operations
 - GIVEN the mlflowclient package needs to send traces to MLflow
 - WHEN the client API trace types are defined
-- THEN `mlflowclient.Trace` wraps the generated `gen/mlflow.TraceInfoV3` proto type for API transport
+- THEN `mlflowclient.Trace` wraps the generated `proto/gen/mlflow.TraceInfoV3` proto type for API transport
 - AND conversion functions exist to convert `*tracing.Trace` to `*mlflowclient.Trace`:
 ```go
 // ConvertTrace converts a tracing.Trace to the API wire format.

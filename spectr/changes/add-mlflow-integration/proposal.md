@@ -12,7 +12,7 @@ MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers
 
 ## What Changes
 
-### 1. Proto-based Go Client Generation (`proto/`, `gen/`)
+### 1. Proto-based Go Client Generation (`proto/`)
 
 - **NEW**: Clone MLflow repository (v3.8.0) to `mlflow-ref/` for proto source files
   ```bash
@@ -22,7 +22,7 @@ MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers
 - **NEW**: Strip ScalaPB extensions for pure Go struct generation
 - **NEW**: Use Buf toolchain for proto compilation
 - **NEW**: Include OpenTelemetry protos for span types
-- **NEW**: Generate Go code to `gen/mlflow/` package
+- **NEW**: Generate Go code to `proto/gen/mlflow/` package
 - **NEW**: Add Taskfile tasks for proto generation workflow
 
 ### 2. MLflow REST Client (`mlflowclient/`)
@@ -77,7 +77,7 @@ MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers
 
 - **Affected code**:
   - New `proto/` directory with Buf configuration
-  - New `gen/mlflow/` generated package
+  - New `proto/gen/mlflow/` generated package
   - New `mlflowclient/` package
   - New `eval/` package
   - Agent callbacks integration in `agent.go`
