@@ -240,7 +240,7 @@ type SearchExperimentsOptions struct {
 
 ### Requirement: Filter String Syntax
 
-All search operations use a common filter string syntax.
+All search operations SHALL use a common filter string syntax.
 
 #### Scenario: Filter string syntax
 - GIVEN a search operation that accepts a filter parameter
@@ -260,7 +260,7 @@ All search operations use a common filter string syntax.
 
 ### Requirement: Pagination
 
-All search operations support cursor-based pagination.
+All search operations SHALL support cursor-based pagination.
 
 #### Scenario: Pagination behavior
 - GIVEN a search operation that returns paginated results

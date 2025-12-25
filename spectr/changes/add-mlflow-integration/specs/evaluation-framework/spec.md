@@ -2,7 +2,7 @@
 
 ### Requirement: Package Dependencies
 
-The eval package imports the tracing package for type safety with agent-specific scorers.
+The eval package SHALL import the tracing package for type safety with agent-specific scorers.
 
 #### Scenario: Tracing dependency
 - GIVEN the eval package uses *tracing.Trace for agent-specific scorers
