@@ -58,35 +58,62 @@ Fantasy is a Go library for building AI agents. Users need observability and eva
 - Minimal code surface area
 - Generated types ensure API compatibility
 
+**Authentication**: Bearer token authentication via `WithToken(token)` option.
+
+**Timeout and Retry Defaults**:
+- Default request timeout: 30 seconds
+- Retry configuration (for 5xx and connection errors):
+  - Maximum retries: 3
+  - Initial delay: 1 second
+  - Backoff multiplier: 2x (exponential)
+  - Maximum delay: 10 seconds
+  - Jitter: ±10% randomization
+
 **Pattern**:
 ```go
 func (c *Client) doRequest(ctx context.Context, method, path string,
     req, resp proto.Message) error {
     data, _ := protojson.Marshal(req)
-    // ... HTTP request ...
+    // ... HTTP request with timeout and retry ...
     return protojson.Unmarshal(respData, resp)
 }
 ```
 
-### Decision 3: Decoupled Evaluation Framework
+### Decision 3: Evaluation Framework with Optional MLflow Export
 
-**What**: Evaluation framework uses its own Go types with converters to proto.
+**What**: Evaluation framework uses Go-native types with optional MLflow export via converters.
 
 **Why**:
-- Evaluation works standalone without MLflow server
+- Evaluation runs without requiring an MLflow server (results can be local-only)
 - Go-native types are more ergonomic (`Scorer` interface, `Dataset` struct)
-- Proto types are for serialization, not business logic
+- Proto types are for serialization to MLflow, not business logic
 - Easier testing with Go types
+
+**Note on Dependencies**: The eval package imports the tracing package for agent-specific scorers
+(ToolCallTrajectory, StepValidation) that need to inspect `*tracing.Trace` data. This coupling is
+intentional for type safety. Users who don't need agent-specific scorers can still use the eval
+package without ever calling MLflow APIs—the dependency is compile-time only, not runtime.
 
 **Architecture**:
 ```
 eval/
-├── scorer.go          # Scorer interface + built-in scorers
+├── scorer.go          # Scorer interface + built-in heuristic scorers
+├── heuristic.go       # Heuristic scorers: ExactMatch, Contains, Regex, JSONMatch, NumericRange
+├── agent_scorers.go   # Agent-specific scorers: ToolCallTrajectory, StepValidation
 ├── dataset.go         # Dataset and test case types
 ├── evaluator.go       # Evaluation runner
-├── llm_judge.go       # LLM-as-judge scorers
-└── mlflow_export.go   # Converters to proto/Assessment
+├── llm_judge.go       # LLM-as-judge scorers (Correctness, Guidelines, Relevance, Groundedness)
+└── mlflow_export.go   # Converters to proto/Assessment for MLflow export
 ```
+
+**Heuristic Scorers** (code-based, no LLM required):
+- `ExactMatch`: String equality comparison
+- `Contains`: Substring matching
+- `Regex`: Pattern matching
+- `JSONMatch`: Structural JSON comparison (configurable null handling)
+- `NumericRange`: Value within bounds check
+- `ToolCallTrajectory`: Tool call sequence validation (requires trace)
+- `StepValidation`: Step count and content validation (requires trace)
 
 ### Decision 4: Callback-based Tracing Integration
 
@@ -98,20 +125,32 @@ eval/
 - Callbacks already exist for step/tool events
 - No changes to core agent logic
 
+**Span Hierarchy**: `Agent -> Step -> LLM (inferred) -> Tool`
+
+**Note on LLM Span Inference**: Fantasy's callback system provides OnStepStart/OnStepFinish and
+OnToolCall/OnToolResult, but does not expose direct LLM call hooks. LLM spans are therefore
+**inferred retroactively** from step timing: the LLM span covers the time between step start
+and the first tool call (or step end if no tools). This is an approximation but provides
+useful visibility into LLM execution time. Token usage is captured from the step's response
+metadata when available.
+
 **Pattern**:
 ```go
 agent := fantasy.NewAgent(model,
-    fantasy.WithTracing(fantasy.TracingConfig{
+    fantasy.WithTracing(tracing.TracingConfig{
         Client:       mlflowClient,
         ExperimentID: "my-experiment",
-        AgentName:    "my-agent",      // optional
+        AgentName:    "my-agent",      // optional, defaults to "agent"
         ModelName:    "gpt-4",         // optional
-        SessionID:    "session-123",   // optional, auto-generated if not set
+        SessionID:    "session-123",   // optional, auto-generated UUID v4 if not set
+        Tags:         map[string]string{"env": "prod"},  // optional custom tags
     }),
 )
 ```
 
-Note: `fantasy.WithTracing()` is in the fantasy package for consistency with other agent options.
+Note: `fantasy.WithTracing()` is in the fantasy package for consistency with other agent options
+(e.g., `fantasy.WithTools()`, `fantasy.WithSystemPrompt()`). The TracingConfig struct is defined in
+the tracing/ package but the WithTracing() function is exported from fantasy/ to maintain API ergonomics.
 The tracing wrapper intercepts Run/Stream calls to capture context before delegating to the agent.
 
 ### Decision 5: Configurable Parallelism for Evaluation
@@ -229,8 +268,10 @@ fantasy/
 │   ├── llm_judge.go                # LLM-as-judge scorers
 │   └── mlflow_export.go            # Proto converters
 │
-└── tracing/                        # Tracing integration
-    ├── tracer.go                   # Trace/span builder
-    ├── callbacks.go                # Agent callback integration
-    └── options.go                  # WithTracing() option
+├── tracing/                        # Tracing integration
+│   ├── tracer.go                   # Trace/span builder
+│   ├── callbacks.go                # Agent callback integration
+│   └── config.go                   # TracingConfig struct
+│
+└── agent.go                        # WithTracing() option (fantasy package)
 ```

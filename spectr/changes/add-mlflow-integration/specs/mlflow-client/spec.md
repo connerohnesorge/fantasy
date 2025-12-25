@@ -8,6 +8,58 @@ The client uses two API versions:
 
 Both versions use the same authentication and base URL. Version selection is automatic based on the operation.
 
+### Authentication
+
+The client SHALL support Bearer token authentication.
+
+#### Scenario: Bearer token authentication
+- GIVEN a client configured with `WithToken(token)` option
+- WHEN any API request is made
+- THEN the `Authorization: Bearer <token>` header is included
+- AND if no token is configured, no Authorization header is sent
+
+#### Scenario: Authentication error handling
+- GIVEN an API response with status code 401 (Unauthorized)
+- WHEN the response is processed
+- THEN an APIError is returned with IsUnauthorized() returning true
+- AND the error message indicates authentication failure
+
+- GIVEN an API response with status code 403 (Forbidden)
+- WHEN the response is processed
+- THEN an APIError is returned with IsForbidden() returning true
+
+### Timeout and Retry Configuration
+
+The client SHALL support configurable timeouts and automatic retries.
+
+#### Scenario: Default timeout
+- GIVEN a client created without explicit timeout configuration
+- WHEN an API request is made
+- THEN the request times out after 30 seconds by default
+- AND context cancellation is respected
+
+#### Scenario: Custom timeout
+- GIVEN a client configured with `WithTimeout(duration)` option
+- WHEN an API request is made
+- THEN the request uses the specified timeout duration
+
+#### Scenario: Retry configuration
+- GIVEN a client configured with retry options
+- WHEN a retryable error occurs (5xx status codes, connection errors)
+- THEN the client retries with the following default configuration:
+  - Maximum retries: 3
+  - Initial delay: 1 second
+  - Backoff multiplier: 2x (exponential backoff)
+  - Maximum delay: 10 seconds
+  - Jitter: ±10% randomization to prevent thundering herd
+- AND retries are NOT triggered for client errors (4xx except 429)
+- AND rate limit errors (429) trigger retry with Retry-After header if present
+
+#### Scenario: Retry disabled
+- GIVEN a client configured with `WithRetries(0)` option
+- WHEN an error occurs
+- THEN no retries are attempted
+
 ### Requirement: Proto-based Code Generation
 
 The system SHALL generate Go structs from MLflow proto files using the Buf toolchain.
@@ -67,11 +119,14 @@ type APIError struct {
     ErrorCode  string // MLflow error code (e.g., "RESOURCE_DOES_NOT_EXIST")
 }
 
-func (e *APIError) Error() string // Implements error interface
+func (e *APIError) Error() string      // Implements error interface
+func (e *APIError) IsNotFound() bool   // Returns true for 404 status codes
+func (e *APIError) IsConflict() bool   // Returns true for 409 status codes
+func (e *APIError) IsServerError() bool // Returns true for 5xx status codes
+func (e *APIError) IsUnauthorized() bool // Returns true for 401 status codes
+func (e *APIError) IsForbidden() bool   // Returns true for 403 status codes
+func (e *APIError) IsRetryable() bool   // Returns true for 429, 5xx, or connection errors
 ```
-- AND IsNotFound() returns true for 404 status codes
-- AND IsConflict() returns true for 409 status codes
-- AND IsServerError() returns true for 5xx status codes
 
 ### Requirement: Experiment Management
 
@@ -95,6 +150,20 @@ The system SHALL support MLflow experiment CRUD operations.
 - THEN a POST request is made to `/api/2.0/mlflow/experiments/search`
 - AND matching experiments are returned with pagination token
 
+#### Scenario: SearchExperimentsOptions structure
+- GIVEN the mlflowclient package
+- WHEN SearchExperimentsOptions is defined
+- THEN it has the following structure:
+```go
+type SearchExperimentsOptions struct {
+    Filter    string // Filter string (e.g., "name LIKE 'my-%'")
+    MaxResults int   // Maximum results to return (default: 1000, max: 50000)
+    PageToken string // Token for pagination continuation
+    OrderBy   []string // Order by columns (e.g., ["name ASC", "creation_time DESC"])
+    ViewType  string // "ACTIVE_ONLY", "DELETED_ONLY", or "ALL" (default: "ACTIVE_ONLY")
+}
+```
+
 ### Requirement: Run Management
 
 The system SHALL support MLflow run CRUD and logging operations.
@@ -115,7 +184,15 @@ The system SHALL support MLflow run CRUD and logging operations.
 - GIVEN a run ID and new status
 - WHEN `client.UpdateRun(ctx, runID, status, endTime)` is called
 - THEN a POST request is made to `/api/2.0/mlflow/runs/update`
-- AND the run status is updated
+- AND the updated RunInfo is returned
+- AND status must be one of: "RUNNING", "SCHEDULED", "FINISHED", "FAILED", "KILLED"
+- AND endTime is optional (pass 0 to not update)
+
+#### Scenario: LogBatch with empty inputs
+- GIVEN a LogBatch call with nil or empty slices for metrics, params, or tags
+- WHEN `client.LogBatch(ctx, runID, nil, nil, nil)` is called
+- THEN the request is still sent with empty arrays
+- AND no error is returned (no-op is valid)
 
 ### Requirement: Trace Management
 
@@ -151,6 +228,9 @@ type TraceBuilder struct {
 - WHEN `client.GetTrace(ctx, traceID, allowPartial)` is called
 - THEN a GET request is made to `/api/3.0/mlflow/traces/get`
 - AND the full trace with spans is returned
+- AND `allowPartial` (bool) determines behavior for incomplete traces:
+  - If true: return partial trace data if trace is still in progress
+  - If false: return error if trace is incomplete
 
 #### Scenario: Search traces
 - GIVEN locations, filter, and pagination options
@@ -158,11 +238,39 @@ type TraceBuilder struct {
 - THEN a POST request is made to `/api/3.0/mlflow/traces/search`
 - AND matching trace infos are returned
 
+#### Scenario: SearchTracesOptions structure
+- GIVEN the mlflowclient package
+- WHEN SearchTracesOptions is defined
+- THEN it has the following structure:
+```go
+type SearchTracesOptions struct {
+    ExperimentIDs []string // Experiment IDs to search within
+    Filter        string   // Filter string (e.g., "status = 'OK'", "tags.env = 'prod'")
+    MaxResults    int      // Maximum results to return (default: 100, max: 1000)
+    PageToken     string   // Token for pagination continuation
+    OrderBy       []string // Order by columns (e.g., ["timestamp_ms DESC"])
+}
+```
+
 #### Scenario: Delete traces
 - GIVEN an experiment ID and deletion criteria
 - WHEN `client.DeleteTraces(ctx, experimentID, opts)` is called
 - THEN a POST request is made to `/api/3.0/mlflow/traces/delete-traces`
 - AND the count of deleted traces is returned
+
+#### Scenario: DeleteTracesOptions structure
+- GIVEN the mlflowclient package
+- WHEN DeleteTracesOptions is defined
+- THEN it has the following structure:
+```go
+type DeleteTracesOptions struct {
+    // At least one of these must be specified:
+    MaxTraces       int    // Maximum number of traces to delete
+    MaxTimestampMs  int64  // Delete traces older than this timestamp (milliseconds since epoch)
+    Filter          string // Filter string to select traces for deletion
+}
+```
+- AND if none of MaxTraces, MaxTimestampMs, or Filter is specified, an error is returned
 
 #### Scenario: Set trace tag
 - GIVEN a trace ID, key, and value
@@ -186,31 +294,95 @@ type TraceBuilder struct {
 
 The system SHALL support MLflow assessment API operations.
 
+#### Scenario: Assessment type definition
+- GIVEN the mlflowclient package
+- WHEN Assessment is defined
+- THEN it has the following structure:
+```go
+// Assessment represents feedback or expectation attached to a trace.
+type Assessment struct {
+    Name       string            // Assessment name (e.g., "correctness", "relevance")
+    Source     AssessmentSource  // Source of the assessment (code, human, LLM judge)
+    TraceID    string            // Associated trace ID (optional at creation)
+    SpanID     string            // Associated span ID (optional, for span-level assessments)
+    Rationale  string            // Explanation for the assessment
+    Metadata   map[string]string // Additional metadata
+
+    // Exactly one of Feedback or Expectation must be set:
+    Feedback    *FeedbackValue    // Feedback value (score result)
+    Expectation *ExpectationValue // Expected value (ground truth)
+}
+
+// AssessmentSource identifies who/what created the assessment.
+type AssessmentSource struct {
+    SourceType string // "CODE", "HUMAN", or "LLM_JUDGE"
+    SourceID   string // Identifier (e.g., scorer name, user email, model name)
+}
+
+// FeedbackValue contains the actual feedback score.
+type FeedbackValue struct {
+    Value any                // bool, float64, int, string, or structured value
+    Error *AssessmentError   // Error if scoring failed (optional)
+}
+
+// ExpectationValue contains the expected/ground truth value.
+type ExpectationValue struct {
+    Value any // Expected value (JSON-serializable)
+}
+
+// AssessmentError captures scorer failure information.
+type AssessmentError struct {
+    ErrorMessage string // Human-readable error message
+    ErrorCode    string // Error code (e.g., "SCORER_TIMEOUT", "LLM_FAILURE")
+    StackTrace   string // Optional stack trace
+}
+```
+
 #### Scenario: Create assessment
 - GIVEN a trace ID and assessment with feedback
 - WHEN `client.CreateAssessment(ctx, traceID, assessment)` is called
 - THEN a POST request is made to `/api/3.0/mlflow/traces/{trace_id}/assessments`
 - AND the assessment is created with an ID
+- AND the created Assessment with assessment_id is returned
 
 #### Scenario: Update assessment
 - GIVEN a trace ID, assessment ID, and update mask
 - WHEN `client.UpdateAssessment(ctx, traceID, assessmentID, assessment, mask)` is called
-- THEN a PATCH request is made to the assessment endpoint
-- AND only specified fields are updated
+- THEN a PATCH request is made to `/api/3.0/mlflow/traces/{trace_id}/assessments/{assessment_id}`
+- AND only fields specified in mask are updated
+- AND mask is a []string of field names (e.g., ["rationale", "feedback.value"])
 
 #### Scenario: Delete assessment
 - GIVEN a trace ID and assessment ID
 - WHEN `client.DeleteAssessment(ctx, traceID, assessmentID)` is called
-- THEN a DELETE request is made to the assessment endpoint
+- THEN a DELETE request is made to `/api/3.0/mlflow/traces/{trace_id}/assessments/{assessment_id}`
 - AND the assessment is removed
 
 ### Requirement: Scorer Registration
 
 The system SHALL support MLflow scorer registration API.
 
+#### Scenario: SerializedScorer structure
+- GIVEN the mlflowclient package
+- WHEN SerializedScorer is defined
+- THEN it has the following structure:
+```go
+// SerializedScorer represents a scorer definition for registration.
+type SerializedScorer struct {
+    Type        string            // Scorer type: "CODE", "LLM_JUDGE", or "HEURISTIC"
+    Name        string            // Scorer name (e.g., "correctness")
+    Description string            // Human-readable description
+    Config      map[string]any    // Scorer-specific configuration (JSON-serializable)
+}
+```
+- AND Config contents depend on Type:
+  - For "CODE": `{"function_name": "...", "package": "..."}`
+  - For "LLM_JUDGE": `{"model": "...", "prompt_template": "...", "temperature": 0.0}`
+  - For "HEURISTIC": `{"heuristic_type": "exact_match|contains|regex|json_match|numeric_range"}`
+
 #### Scenario: Register scorer
 - GIVEN an experiment ID, scorer name, and serialized scorer
-- WHEN `client.RegisterScorer(ctx, experimentID, name, serialized)` is called
+- WHEN `client.RegisterScorer(ctx, experimentID, name, scorer SerializedScorer)` is called
 - THEN a POST request is made to `/api/3.0/mlflow/scorers/register`
 - AND a new version is created with scorer ID
 
@@ -222,7 +394,8 @@ The system SHALL support MLflow scorer registration API.
 
 #### Scenario: Get scorer
 - GIVEN an experiment ID, scorer name, and optional version
-- WHEN `client.GetScorer(ctx, experimentID, name, version)` is called
+- WHEN `client.GetScorer(ctx, experimentID, name, version int)` is called
 - THEN a GET request is made to `/api/3.0/mlflow/scorers/get`
-- AND if version is empty string or 0, the latest version is returned
+- AND if version is 0, the latest version is returned
 - AND the scorer definition is returned
+- AND version is an int (0 for latest, positive integer for specific version)

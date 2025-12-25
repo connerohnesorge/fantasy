@@ -1,5 +1,16 @@
 ## ADDED Requirements
 
+### Requirement: Package Dependencies
+
+The eval package imports the tracing package for type safety with agent-specific scorers.
+
+#### Scenario: Tracing dependency
+- GIVEN the eval package uses *tracing.Trace for agent-specific scorers
+- WHEN users import the eval package
+- THEN the tracing package is also imported transitively
+- AND users who don't use agent-specific scorers can ignore this dependency
+- AND no MLflow server connection is required to use the eval package locally
+
 ### Requirement: Scorer Interface
 
 The system SHALL define a Scorer interface for evaluation criteria.
@@ -23,9 +34,10 @@ type Scorer interface {
 
 // ScorerInput contains all data needed for scoring.
 type ScorerInput struct {
-    Outputs      map[string]any  // Generated outputs to evaluate
-    Expectations map[string]any  // Expected values for comparison
-    Trace        *Trace          // Optional trace data (nil for scorers that don't need it)
+    Outputs      map[string]any   // Generated outputs to evaluate
+    Expectations map[string]any   // Expected values for comparison
+    Trace        *tracing.Trace   // Optional trace data (nil for scorers that don't need it)
+    Inputs       map[string]any   // Original inputs (for context in scoring)
 }
 ```
 
@@ -35,12 +47,29 @@ type ScorerInput struct {
 - THEN it has the following structure:
 ```go
 type Score struct {
-    Value     any             // bool, float64, or string
+    Value     any             // bool, float64, int, or string
     Rationale string          // Explanation of the score
     Metadata  map[string]any  // Additional structured information
+    Error     error           // Non-nil if scorer failed (Value should be nil/zero)
 }
 ```
-- AND Value can be boolean (pass/fail), numeric (0.0-1.0), or categorical (string label)
+- AND Value can be boolean (pass/fail), numeric (0.0-1.0 for normalized, any range for raw), or categorical (string label)
+
+#### Scenario: Score value range handling
+- GIVEN a numeric score value
+- WHEN the score is validated
+- THEN values are accepted as-is (no clamping or rejection)
+- AND normalized scorers (LLM judges) return values in 0.0-1.0 range
+- AND heuristic scorers may return values in any range appropriate to the metric
+- AND boolean scores are treated as 1.0 (true) or 0.0 (false) for aggregation
+
+#### Scenario: Score with error
+- GIVEN a scorer that encounters an error
+- WHEN the error is captured
+- THEN Score.Error is set to the error
+- AND Score.Value is set to nil or zero value
+- AND Score.Rationale may contain error context
+- AND the test case is marked as having an error (not pass or fail)
 
 ### Requirement: Dataset Types
 
@@ -76,6 +105,17 @@ The system SHALL provide Dataset and TestCase types for evaluation inputs.
 - WHEN `LoadDataset(path)` is called
 - THEN the file is parsed into a Dataset struct
 - AND validation errors are returned for malformed files
+
+#### Scenario: Dataset validation rules
+- GIVEN a dataset is loaded or created
+- WHEN validation is performed
+- THEN the following rules are enforced:
+  - Dataset must have a non-empty name
+  - Dataset must have at least one test case
+  - Each test case must have a non-nil Inputs map
+  - Inputs and Expectations values must be JSON-serializable (no channels, functions)
+  - If Outputs is nil and no PredictFunc is provided, an error is returned during evaluation
+- AND validation errors include the specific field and test case index that failed
 
 ### Requirement: Evaluation Runner
 
@@ -117,8 +157,11 @@ The system SHALL provide an Evaluator for running scorers against datasets.
 ```go
 // PredictFunc generates outputs from inputs.
 // Returns outputs map and optional trace for agent-specific scorers.
-type PredictFunc func(ctx context.Context, inputs map[string]any) (outputs map[string]any, trace *Trace, err error)
+// The trace is *tracing.Trace from the tracing package.
+type PredictFunc func(ctx context.Context, inputs map[string]any) (outputs map[string]any, trace *tracing.Trace, err error)
 ```
+- AND if the predict function returns an error, the test case is marked as errored
+- AND if trace is nil, agent-specific scorers (ToolCallTrajectory, StepValidation) will skip or error
 
 ### Requirement: Heuristic Scorers
 
@@ -145,7 +188,26 @@ The system SHALL provide built-in heuristic scorers.
 - THEN it returns true if structures are semantically equivalent
 - AND comparison ignores whitespace formatting
 - AND comparison ignores object key ordering
-- AND null values are considered equal to missing keys (optional: configurable)
+
+#### Scenario: JSONMatch null handling configuration
+- GIVEN a JSONMatch scorer with configurable options
+- WHEN `JSONMatchScorer(JSONMatchOptions{...})` is called
+- THEN the following options are available:
+```go
+type JSONMatchOptions struct {
+    // NullEqualsMissing: if true, null values are considered equal to missing keys
+    // Default: false (null and missing are different)
+    NullEqualsMissing bool
+
+    // IgnoreArrayOrder: if true, array elements are compared as sets (order doesn't matter)
+    // Default: false (array order matters)
+    IgnoreArrayOrder bool
+
+    // FloatTolerance: tolerance for float comparisons (absolute difference)
+    // Default: 0 (exact match required)
+    FloatTolerance float64
+}
+```
 
 #### Scenario: NumericRange scorer
 - GIVEN min and max bounds and numeric output
@@ -156,6 +218,26 @@ The system SHALL provide built-in heuristic scorers.
 - GIVEN expected tool call sequence and trace with tool spans
 - WHEN ToolCallTrajectory scorer is applied
 - THEN it returns true if tool names match expected sequence in order
+- AND requires a non-nil *tracing.Trace in ScorerInput
+- AND extracts tool spans from the trace by SpanType == "TOOL"
+- AND compares tool names in chronological order (by start time)
+- AND the expected sequence is specified via `expectations["tool_sequence"]` as []string
+
+#### Scenario: ToolCallTrajectory options
+- GIVEN a ToolCallTrajectory scorer with options
+- WHEN `ToolCallTrajectoryScorer(ToolCallTrajectoryOptions{...})` is called
+- THEN the following options are available:
+```go
+type ToolCallTrajectoryOptions struct {
+    // Strict: if true, requires exact match (no extra tools allowed)
+    // Default: false (extra tools are allowed as long as expected sequence is present)
+    Strict bool
+
+    // IgnoreOrder: if true, checks that all expected tools were called (in any order)
+    // Default: false (order matters)
+    IgnoreOrder bool
+}
+```
 
 #### Scenario: StepValidation scorer
 - GIVEN expected step count and validation rules
@@ -163,6 +245,27 @@ The system SHALL provide built-in heuristic scorers.
 - THEN it validates the agent completed within expected step range
 - AND optionally validates step content patterns via regex
 - AND returns true if all validations pass
+- AND requires a non-nil *tracing.Trace in ScorerInput
+- AND extracts step spans from the trace by SpanType == "CHAIN"
+
+#### Scenario: StepValidation options
+- GIVEN a StepValidation scorer with options
+- WHEN `StepValidationScorer(StepValidationOptions{...})` is called
+- THEN the following options are available:
+```go
+type StepValidationOptions struct {
+    // MinSteps: minimum number of steps required (default: 0, no minimum)
+    MinSteps int
+
+    // MaxSteps: maximum number of steps allowed (default: 0, no maximum)
+    MaxSteps int
+
+    // ContentPatterns: regex patterns that must match step outputs
+    // Key is step index (0-based), value is regex pattern
+    // If step index doesn't exist, validation fails
+    ContentPatterns map[int]string
+}
+```
 
 ### Requirement: LLM-as-Judge Scorers
 
@@ -189,24 +292,96 @@ type JudgeConfig struct {
 - WHEN Correctness scorer is applied
 - THEN an LLM judges if the output correctly answers the question
 - AND returns yes/no with rationale
+- AND uses the following prompt template:
+```
+Consider the following question, claim and document. You must determine whether the claim is
+supported by the document in the context of the question. Do not focus on the correctness or
+completeness of the claim. Do not make assumptions, approximations, or bring in external knowledge.
+
+<question>{{.Input}}</question>
+<claim>{{.ExpectedAnswer}}</claim>
+<document>{{.Input}} - {{.Output}}</document>
+
+Please indicate whether each statement in the claim is supported by the document in the context
+of the question using only the following json format. Do not use any markdown formatting.
+{
+  "rationale": "Reason for the assessment. Start with 'Let's think step by step'",
+  "result": "yes|no"
+}
+```
 
 #### Scenario: Guidelines scorer
 - GIVEN custom guidelines and actual output
 - WHEN Guidelines scorer is applied
 - THEN an LLM judges if output follows the guidelines
 - AND returns pass/fail with rationale
+- AND uses the following prompt template:
+```
+Given the following set of guidelines and some inputs, please assess whether the inputs fully
+comply with all the provided guidelines. Only focus on the provided guidelines and not the
+correctness, relevance, or effectiveness of the inputs.
+
+<guidelines>
+{{range .Guidelines}}<guideline>{{.}}</guideline>
+{{end}}
+</guidelines>
+<input>{{.Input}}</input>
+<output>{{.Output}}</output>
+
+Please provide your assessment using only the following json format. Do not use any markdown formatting.
+If any of the guidelines are not satisfied, the result must be "no".
+{
+  "rationale": "Detailed reasoning for your assessment. Start with 'Let's think step by step.'",
+  "result": "yes|no"
+}
+```
 
 #### Scenario: Relevance scorer
 - GIVEN user query and actual output
 - WHEN Relevance scorer is applied
 - THEN an LLM judges if output is relevant to the query
 - AND returns relevance score with rationale
+- AND uses the following prompt template:
+```
+Consider the following question and answer. You must determine whether the answer provides
+information that is (fully or partially) relevant to the question. Do not focus on the correctness
+or completeness of the answer. Do not make assumptions, approximations, or bring in external knowledge.
+
+<question>{{.Input}}</question>
+<answer>{{.Output}}</answer>
+
+Please indicate whether the answer contains information that is relevant to the question using only
+the following json format. Do not use any markdown formatting.
+{
+  "rationale": "Reason for the assessment. Start with 'Let's think step by step'",
+  "result": "yes|no"
+}
+```
 
 #### Scenario: Groundedness scorer
 - GIVEN retrieved documents and actual output
 - WHEN Groundedness scorer is applied
 - THEN an LLM judges if output is grounded in retrieved content
 - AND returns grounded/not_grounded with rationale
+- AND uses the following prompt template:
+```
+Consider the following claim and document. You must determine whether claim is supported by the
+document. Do not focus on the correctness or completeness of the claim. Do not make assumptions,
+approximations, or bring in external knowledge.
+
+<claim>
+  <question>{{.Input}}</question>
+  <answer>{{.Output}}</answer>
+</claim>
+<document>{{.RetrievalContext}}</document>
+
+Please indicate whether each statement in the claim is supported by the document using only the
+following json format. Do not use any markdown formatting.
+{
+  "rationale": "Reason for the assessment. Start with 'Let's think step by step'",
+  "result": "yes|no"
+}
+```
 
 #### Scenario: Judge retry on failure
 - GIVEN an LLM API error during scoring
@@ -227,8 +402,36 @@ The system SHALL provide structured evaluation results.
 #### Scenario: Result aggregation
 - GIVEN completed evaluation of all test cases
 - WHEN results are aggregated
-- THEN summary statistics are computed per scorer (pass rate, mean, std)
-- AND individual test case results are available
+- THEN summary statistics are computed per scorer using these formulas:
+
+**Pass Rate** (for boolean scores):
+```
+pass_rate = count(score.Value == true) / count(all_scores)
+```
+- Only includes test cases where Score.Error is nil
+- Expressed as a float64 between 0.0 and 1.0
+
+**Mean** (for numeric scores):
+```
+mean = sum(score.Value) / count(all_scores)
+```
+- Only includes test cases where Score.Error is nil and Score.Value is numeric
+- Boolean true = 1.0, boolean false = 0.0 for mean calculation
+
+**Standard Deviation** (sample std, for numeric scores):
+```
+std = sqrt(sum((score.Value - mean)^2) / (count - 1))
+```
+- Uses sample standard deviation (Bessel's correction with n-1)
+- Returns 0.0 if count <= 1
+- Only includes test cases where Score.Error is nil
+
+**Error Rate**:
+```
+error_rate = count(Score.Error != nil) / count(all_test_cases)
+```
+
+- AND individual test case results are available via `Results.TestCases`
 
 #### Scenario: Result export
 - GIVEN evaluation results
@@ -243,8 +446,35 @@ The system SHALL support exporting evaluation results to MLflow.
 #### Scenario: Score to Assessment conversion
 - GIVEN a Score from a scorer
 - WHEN converted to MLflow Assessment
-- THEN source type is set to CODE or LLM_JUDGE
-- AND value and rationale are mapped correctly
+- THEN the conversion follows these rules:
+```go
+// ScoreToAssessment converts an eval.Score to an mlflowclient.Assessment
+func ScoreToAssessment(scorerName string, score Score, isLLMJudge bool) *mlflowclient.Assessment {
+    sourceType := "CODE"
+    if isLLMJudge {
+        sourceType = "LLM_JUDGE"
+    }
+
+    return &mlflowclient.Assessment{
+        Name: scorerName,
+        Source: mlflowclient.AssessmentSource{
+            SourceType: sourceType,
+            SourceID:   scorerName,
+        },
+        Feedback: &mlflowclient.FeedbackValue{
+            Value: score.Value,
+            Error: convertError(score.Error),
+        },
+        Rationale: score.Rationale,
+        Metadata:  convertMetadata(score.Metadata),
+    }
+}
+```
+- AND source type is "CODE" for heuristic scorers
+- AND source type is "LLM_JUDGE" for LLM-based scorers
+- AND source type is "HUMAN" for human-provided expectations (if any)
+- AND Score.Error is converted to AssessmentError if present
+- AND Score.Metadata keys are converted to string values
 
 #### Scenario: Automatic assessment logging
 - GIVEN evaluation run with `WithMLflowExport(client)` option

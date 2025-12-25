@@ -6,8 +6,9 @@
 - [ ] 1.2 Add Taskfile tasks: `proto:deps`, `proto:gen`, `proto:lint`
 - [ ] 1.3 Create `proto/scalapb/scalapb.proto` stub for extension compatibility
 - [ ] 1.4 Download OpenTelemetry protos to `proto/opentelemetry/proto/`
-- [ ] 1.5 Download Google well-known types (timestamp, duration, field_mask)
+- [ ] 1.5 Download Google well-known types to `proto/google/protobuf/` (timestamp.proto, duration.proto, struct.proto, any.proto, field_mask.proto)
 - [ ] 1.6 Add `gen/` to `.gitignore`
+- [ ] 1.7 Add Taskfile task `proto:sync` to update protos from mlflow-ref (documented in design)
 
 ## 2. MLflow Proto Curation
 
@@ -85,18 +86,33 @@
 
 ## 8. Tracing Integration
 
-- [ ] 8.1 Create `tracing/` package scaffold
-- [ ] 8.2 Implement `Tracer` type with span creation methods
+- [ ] 8.1 Create `tracing/` package scaffold with config.go, tracer.go, callbacks.go
+- [ ] 8.2 Implement `Tracer` type with span creation methods (crypto/rand for IDs)
 - [ ] 8.3 Implement span hierarchy: Agent -> Step -> (LLM inferred) -> Tool
-- [ ] 8.4 Define span attribute keys (mlflow.spanInputs, mlflow.spanOutputs, etc.)
-- [ ] 8.5 Implement `TracingConfig` struct with Client, ExperimentID, AgentName, ModelName, SessionID, Tags
+  - Note: LLM spans are inferred retroactively from step timing since Fantasy callbacks don't expose direct LLM call hooks
+- [ ] 8.4 Define span attribute key constants (see tracing spec for full list)
+- [ ] 8.5 Implement `TracingConfig` struct in tracing package:
+  ```go
+  type TracingConfig struct {
+      Client       *mlflowclient.Client
+      ExperimentID string
+      AgentName    string            // optional, defaults to "agent"
+      ModelName    string            // optional
+      SessionID    string            // optional, auto-generated UUID v4 if empty
+      Tags         map[string]string // optional custom tags
+      FlushTimeout time.Duration     // optional, defaults to 10s
+  }
+  ```
 - [ ] 8.6 Implement tracing wrapper that intercepts Run/Stream calls
-- [ ] 8.7 Create `fantasy.WithTracing(config)` agent option
+- [ ] 8.7 Create `fantasy.WithTracing(config)` agent option in fantasy package (agent.go)
+  - WithTracing is in fantasy package for API consistency with other agent options
+  - TracingConfig is in tracing package
 - [ ] 8.8 Hook OnStepStart/OnStepFinish for step spans and inferred LLM spans
-- [ ] 8.9 Hook OnToolCall/OnToolResult for tool spans
-- [ ] 8.10 Implement automatic trace flush on wrapper completion
-- [ ] 8.11 Add unit tests for span generation
-- [ ] 8.12 Add integration test with real agent execution
+- [ ] 8.9 Hook OnToolCall/OnToolResult for tool spans (match by tool call ID for concurrency safety)
+- [ ] 8.10 Implement automatic trace flush on wrapper completion (blocking with timeout)
+- [ ] 8.11 Implement thread safety (sync.Mutex for span state, context-based trace storage)
+- [ ] 8.12 Add unit tests for span generation
+- [ ] 8.13 Add integration test with real agent execution
 
 ## 9. Documentation
 
