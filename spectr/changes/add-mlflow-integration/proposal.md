@@ -40,7 +40,8 @@ MLflow's GenAI platform (v3.8+) provides distributed tracing, evaluation scorers
 
 ### 3. Tracing Integration
 
-- **NEW**: Full span hierarchy: Agent -> Step -> LLM (inferred) -> Tool
+- **NEW**: Full span hierarchy: Agent -> Step -> (LLM, Tool)
+  - LLM and Tool spans are siblings (both children of Step span)
   - LLM spans are inferred retroactively from step timing (Fantasy doesn't expose direct LLM hooks)
 - **NEW**: SpanTypes: AGENT, LLM, TOOL, CHAIN, RETRIEVER, etc.
 - **NEW**: Full message content in span attributes (`mlflow.spanInputs`, `mlflow.spanOutputs`) with truncation at 10,240 bytes

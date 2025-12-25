@@ -47,6 +47,8 @@ The system SHALL support concurrent agent executions and tool calls safely.
 - WHEN OnToolCall and OnToolResult fire out of order
 - THEN the tracer handles this gracefully
 - AND spans are matched by tool call ID (not by order)
+- AND tool call ID is sourced from the ToolCall.ID field provided by Fantasy callbacks
+- AND the ID format follows OpenAI's tool_call ID pattern (e.g., "call_abc123")
 
 ### Requirement: Context Propagation
 
@@ -97,6 +99,95 @@ The system SHALL handle spans that never receive explicit end calls.
 - AND status message includes panic information
 - AND the trace is flushed before the panic continues
 
+### Requirement: Core Data Structures
+
+The system SHALL define core data structures for traces and spans.
+
+#### Scenario: Span structure definition
+- GIVEN the tracing package
+- WHEN the Span type is defined
+- THEN it has the following structure:
+```go
+// Span represents a unit of work within a trace.
+type Span struct {
+    TraceID     string            // Trace ID this span belongs to (format: tr-<hex>)
+    SpanID      string            // Unique span ID within trace (16 hex chars)
+    ParentID    string            // Parent span ID (empty for root span)
+    Name        string            // Span name (e.g., "agent", "step-1", tool name)
+    SpanType    SpanType          // Type: AGENT, LLM, TOOL, CHAIN, etc.
+    StartTimeNs int64             // Start time in nanoseconds since epoch
+    EndTimeNs   int64             // End time in nanoseconds since epoch
+    Status      SpanStatus        // Status: OK, ERROR, or UNSET
+    Attributes  map[string]any    // Span attributes (inputs, outputs, etc.)
+    Events      []SpanEvent       // Span events (for streaming chunks, errors)
+    mu          sync.Mutex        // Protects concurrent access to span state
+}
+
+// SpanStatus represents the completion status of a span.
+type SpanStatus struct {
+    Code        SpanStatusCode // OK, ERROR, or UNSET
+    Description string         // Human-readable status message
+}
+
+// SpanStatusCode is the status code for a span.
+type SpanStatusCode int
+
+const (
+    SpanStatusUnset SpanStatusCode = iota
+    SpanStatusOK
+    SpanStatusError
+)
+
+// SpanEvent represents an event that occurred during span execution.
+type SpanEvent struct {
+    Name       string         // Event name
+    Timestamp  int64          // Nanoseconds since epoch
+    Attributes map[string]any // Event attributes
+}
+```
+
+#### Scenario: Trace structure definition
+- GIVEN the tracing package
+- WHEN the Trace type is defined
+- THEN it has the following structure:
+```go
+// Trace represents a complete trace with metadata and spans.
+type Trace struct {
+    TraceID          string            // Unique trace ID (format: tr-<hex>)
+    ExperimentID     string            // MLflow experiment ID
+    RequestTime      int64             // Start time in milliseconds since epoch
+    ExecutionDuration int64            // Duration in milliseconds
+    State            TraceState        // OK, ERROR, or IN_PROGRESS
+    RequestPreview   string            // Truncated user input preview
+    ResponsePreview  string            // Truncated response preview
+    TraceMetadata    map[string]string // Immutable metadata (model, session, etc.)
+    Tags             map[string]string // Mutable tags
+    Spans            []*Span           // All spans in the trace
+    mu               sync.RWMutex      // Protects concurrent access
+}
+
+// TraceState represents the state of a trace.
+type TraceState int
+
+const (
+    TraceStateInProgress TraceState = iota
+    TraceStateOK
+    TraceStateError
+)
+```
+
+#### Scenario: TracingResult structure definition
+- GIVEN a trace operation completes
+- WHEN results need to be returned
+- THEN TracingResult is defined as:
+```go
+// TracingResult contains the result of a traced agent execution.
+type TracingResult struct {
+    Trace      *Trace // The completed trace (nil if tracing disabled)
+    FlushError error  // Error from flushing to MLflow (nil on success)
+}
+```
+
 ### Requirement: Tracer Type
 
 The system SHALL provide a Tracer for creating MLflow-compatible traces and spans.
@@ -127,11 +218,63 @@ The system SHALL provide a Tracer for creating MLflow-compatible traces and span
 - AND state is set to OK if AgentResult.Error is nil
 - AND state is set to ERROR if context was cancelled or timed out
 
+### Requirement: Error Handling
+
+The system SHALL handle error conditions gracefully without panicking.
+
+#### Scenario: Nil MLflow client
+- GIVEN TracingConfig.Client is nil
+- WHEN tracing is enabled
+- THEN a ValidationError is returned immediately
+- AND no tracing operations are attempted
+
+#### Scenario: Invalid experiment ID
+- GIVEN TracingConfig.ExperimentID is empty
+- WHEN a Tracer is created
+- THEN a ValidationError is returned with Field="experimentID"
+- AND the error message indicates the field is required
+
+#### Scenario: JSON serialization failure
+- GIVEN span inputs or outputs contain non-serializable values (channels, functions, circular refs)
+- WHEN the value is serialized
+- THEN the error is logged at WARN level
+- AND a placeholder string "[serialization error]" is used
+- AND span recording continues (not aborted)
+
+#### Scenario: Duplicate StartTrace call
+- GIVEN a trace is already active in the current context
+- WHEN `tracer.StartTrace(ctx)` is called again
+- THEN the existing trace is used (no new trace created)
+- AND a warning is logged about the duplicate call
+
+#### Scenario: Duplicate EndTrace/EndSpan call
+- GIVEN a trace or span has already been ended
+- WHEN `EndTrace()` or `EndSpan()` is called again
+- THEN the call is a no-op (no error)
+- AND a debug log is emitted noting the duplicate call
+
+#### Scenario: Network error during flush
+- GIVEN trace data is being sent to MLflow server
+- WHEN a network error occurs
+- THEN TracingResult.FlushError contains the error
+- AND the trace is still returned in TracingResult.Trace
+- AND the error is logged at ERROR level
+- AND no retry is attempted (retry is the caller's responsibility)
+
+#### Scenario: Invalid token usage data
+- GIVEN token usage values are negative or overflow int64
+- WHEN token usage is recorded
+- THEN the invalid values are logged at WARN level
+- AND the span continues with zero token usage
+
 ### Requirement: Span Hierarchy
 
 The system SHALL create hierarchical spans matching agent execution structure.
 
-The span hierarchy follows: Agent -> Step -> (LLM | Tool)
+The span hierarchy follows: Agent -> Step -> (LLM, Tool)
+
+LLM and Tool spans are siblings—both are children of the Step span. When a step executes,
+it may involve an LLM call followed by zero or more tool calls, all at the same hierarchical level.
 
 Note: LLM spans are inferred from step timing since Fantasy callbacks do not provide
 direct LLM call/result hooks. This approximation captures the primary LLM interaction
@@ -157,8 +300,11 @@ per step but may not reflect retry attempts or multi-model scenarios.
 - THEN an LLM span is created retroactively as child of step span
 - AND span type is set to LLM
 - AND span name includes the model name from TracingConfig.ModelName
-- AND span timing is derived from step start to step finish (approximation)
-- AND token usage is captured from step result if available
+- AND LLM span timing is calculated as:
+  - `start_time_ns` = step start time
+  - `end_time_ns` = first tool call start time (if tools called) OR step end time (if no tools)
+- AND in multi-tool scenarios, only ONE LLM span is inferred per step
+- AND token usage from the step response is attached to the LLM span
 
 #### Scenario: Tool span
 - GIVEN a tool is executed during a step
@@ -207,6 +353,12 @@ type TokenUsage struct {
 
 The system SHALL integrate with Fantasy's existing agent callbacks via a tracing wrapper.
 
+The **tracing wrapper** is a callback implementation that:
+1. Implements Fantasy's `Callbacks` interface (`OnStepStart`, `OnStepFinish`, `OnToolCall`, `OnToolResult`)
+2. Creates and manages MLflow spans in response to agent events
+3. Is instantiated via `fantasy.WithTracing(config)` agent option
+4. Maintains internal state mapping callback events to their corresponding spans
+
 #### Scenario: WithTracing option
 - GIVEN an agent configuration
 - WHEN `fantasy.WithTracing(config)` option is applied
@@ -219,7 +371,9 @@ The system SHALL integrate with Fantasy's existing agent callbacks via a tracing
 - WHEN TracingConfig is created
 - THEN it contains: Client (*mlflowclient.Client), ExperimentID (string)
 - AND optional: AgentName (string), ModelName (string), SessionID (string), Tags (map[string]string)
-- AND SessionID defaults to a new UUID if not provided
+- AND optional: FlushTimeout (time.Duration, default 10s) for trace upload deadline
+- AND SessionID defaults to a new UUID v4 if not provided
+- AND FlushTimeout controls how long to wait when sending trace data to MLflow server
 
 #### Scenario: Tracing wrapper initialization
 - GIVEN tracing is enabled via WithTracing(config)
@@ -411,9 +565,9 @@ The system SHALL truncate span attributes that exceed MLflow limits.
 
 #### Scenario: Preview length
 - GIVEN request_preview or response_preview is generated
-- WHEN the content exceeds 1,000 characters (OSS) or 10,000 characters (Databricks)
+- WHEN the content exceeds 1,000 characters
 - THEN the preview is truncated with "..." suffix
-- AND the limit is determined by tracking URI (OSS vs Databricks)
+- AND truncation happens at UTF-8 character boundaries
 
 ### Requirement: Timestamp Precision
 

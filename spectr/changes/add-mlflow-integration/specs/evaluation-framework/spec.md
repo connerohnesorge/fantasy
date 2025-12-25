@@ -121,6 +121,35 @@ The system SHALL provide Dataset and TestCase types for evaluation inputs.
 
 The system SHALL provide an Evaluator for running scorers against datasets.
 
+#### Scenario: Evaluator type definition
+- GIVEN the eval package
+- WHEN Evaluator is defined
+- THEN it has the following structure:
+```go
+// Evaluator runs scorers against datasets.
+type Evaluator struct {
+    // internal fields for configuration
+}
+
+// NewEvaluator creates an Evaluator with optional configuration.
+func NewEvaluator(opts ...EvalOption) *Evaluator
+
+// Run executes evaluation on the given dataset with the specified scorers.
+func (e *Evaluator) Run(ctx context.Context, dataset *Dataset, scorers []Scorer, opts ...RunOption) (*Results, error)
+
+// EvalOption configures the Evaluator at creation time.
+type EvalOption func(*Evaluator)
+
+// RunOption configures a specific evaluation run.
+type RunOption func(*runConfig)
+
+// Available RunOptions:
+func WithParallelism(n int) RunOption           // Set number of parallel workers (default: 1 = sequential)
+func WithTimeout(d time.Duration) RunOption     // Set per-test-case timeout
+func WithPredict(fn PredictFunc) RunOption      // Set prediction function for generating outputs
+func WithTracing(config TracingConfig) RunOption // Enable tracing for test cases
+```
+
 #### Scenario: Sequential evaluation
 - GIVEN a dataset and list of scorers
 - WHEN `evaluator.Run(ctx, dataset, scorers)` is called with default options
@@ -147,6 +176,55 @@ The system SHALL provide an Evaluator for running scorers against datasets.
 - WHEN evaluation runs with `WithTimeout(5*time.Second)`
 - THEN the scorer is cancelled after timeout
 - AND an error score is recorded for that test case
+
+### Requirement: Error Handling
+
+The system SHALL handle errors gracefully during evaluation.
+
+#### Scenario: Scorer panic recovery
+- GIVEN a scorer that panics during execution
+- WHEN the panic occurs
+- THEN the panic is recovered (not propagated)
+- AND an error Score is recorded with Rationale containing the panic message
+- AND evaluation continues with remaining test cases
+- AND the panic is logged at ERROR level
+
+#### Scenario: Dataset file not found
+- GIVEN a dataset is loaded from a file path
+- WHEN the file does not exist or is not readable
+- THEN an error is returned from the dataset loading function
+- AND the error wraps the underlying file system error
+- AND evaluation does not start
+
+#### Scenario: Context cancellation during evaluation
+- GIVEN an evaluation is in progress
+- WHEN the context is cancelled (e.g., user interrupt)
+- THEN in-progress scorers are cancelled via their context
+- AND completed scores are preserved in Results
+- AND remaining test cases are skipped
+- AND Results.Errors includes a "context cancelled" error
+
+#### Scenario: MLflow export failure
+- GIVEN evaluation completes and export is requested
+- WHEN the MLflow client fails to connect or send data
+- THEN the error is added to Results.Errors with Phase="export"
+- AND local results are still returned
+- AND the caller can decide whether to retry or ignore
+
+#### Scenario: Trace extraction failure
+- GIVEN a test case runs with tracing enabled
+- WHEN trace extraction fails (missing spans, malformed data)
+- THEN TestCaseResult.Trace is nil
+- AND a warning is logged
+- AND agent-specific scorers (ToolCallTrajectory, StepValidation) receive nil trace
+- AND those scorers return error Scores indicating trace unavailable
+
+#### Scenario: Type coercion error in ScorerInput
+- GIVEN a scorer expects a specific input type
+- WHEN the input map contains an incompatible type
+- THEN the scorer returns an error Score
+- AND Rationale includes details about the type mismatch
+- AND the error is not propagated (evaluation continues)
 
 #### Scenario: Predict function
 - GIVEN a dataset without pre-generated outputs
@@ -399,6 +477,47 @@ following json format. Do not use any markdown formatting.
 
 The system SHALL provide structured evaluation results.
 
+#### Scenario: Results structure definition
+- GIVEN an evaluation completes
+- WHEN results are returned
+- THEN the Results type is defined as:
+```go
+// Results contains the complete evaluation output.
+type Results struct {
+    TestCases  []TestCaseResult       // Individual results per test case
+    Summary    map[string]ScorerStats // Aggregated stats per scorer name
+    Errors     []EvalError            // Evaluation-level errors (not per-test-case)
+    StartTime  time.Time              // When evaluation started
+    EndTime    time.Time              // When evaluation completed
+    TotalTests int                    // Total number of test cases processed
+}
+
+// TestCaseResult contains results for a single test case.
+type TestCaseResult struct {
+    TestCase   TestCase             // The original test case
+    Outputs    map[string]any       // Generated outputs (if PredictFunc was run)
+    Scores     map[string]Score     // Scores keyed by scorer name
+    Trace      *tracing.Trace       // Captured trace (if tracing was enabled)
+}
+
+// ScorerStats contains aggregated statistics for a scorer.
+type ScorerStats struct {
+    PassRate   float64 // Percentage of passing scores (0.0-1.0)
+    Mean       float64 // Mean score value (for numeric scores)
+    StdDev     float64 // Standard deviation (for numeric scores)
+    ErrorRate  float64 // Percentage of errored scores (0.0-1.0)
+    ErrorCount int     // Number of test cases where scorer errored
+    Count      int     // Total number of scores computed
+}
+
+// EvalError represents an evaluation-level error.
+type EvalError struct {
+    Phase   string // "setup", "predict", "score", "export"
+    Message string
+    Cause   error
+}
+```
+
 #### Scenario: Result aggregation
 - GIVEN completed evaluation of all test cases
 - WHEN results are aggregated
@@ -416,7 +535,11 @@ pass_rate = count(score.Value == true) / count(all_scores)
 mean = sum(score.Value) / count(all_scores)
 ```
 - Only includes test cases where Score.Error is nil and Score.Value is numeric
-- Boolean true = 1.0, boolean false = 0.0 for mean calculation
+- Type coercion for aggregation:
+  - float64: used directly
+  - int/int64: converted to float64
+  - bool: true = 1.0, false = 0.0
+  - string: skipped (logged as warning)
 
 **Standard Deviation** (sample std, for numeric scores):
 ```

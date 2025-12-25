@@ -14,6 +14,19 @@ Fantasy is a Go library for building AI agents. Users need observability and eva
 - Evaluation framework must work standalone (MLflow is optional backend)
 - Must not break existing Fantasy API
 
+### Terminology Glossary
+
+This section clarifies terminology used across specifications:
+
+| Term | Package | Description |
+|------|---------|-------------|
+| **State** | tracing | Trace-level state: `IN_PROGRESS`, `OK`, `ERROR` (TraceState) |
+| **Status** | tracing | Span-level status: `UNSET`, `OK`, `ERROR` (SpanStatus) |
+| **Score** | eval | Local evaluation result with Value, Rationale, Error |
+| **Assessment** | mlflowclient | MLflow API entity for trace annotations (maps from Score) |
+| **Trace ID** | tracing | Full trace identifier with `tr-` prefix (e.g., `tr-abc123...`) |
+| **Request ID** | tracing | Deprecated alias for Trace ID (used in MLflow v2 API) |
+
 ## Goals / Non-Goals
 
 ### Goals
@@ -112,8 +125,10 @@ eval/
 - `Regex`: Pattern matching
 - `JSONMatch`: Structural JSON comparison (configurable null handling)
 - `NumericRange`: Value within bounds check
-- `ToolCallTrajectory`: Tool call sequence validation (requires trace)
-- `StepValidation`: Step count and content validation (requires trace)
+
+**Agent-specific Scorers** (code-based, require `*tracing.Trace`):
+- `ToolCallTrajectory`: Tool call sequence validation
+- `StepValidation`: Step count and content validation
 
 ### Decision 4: Callback-based Tracing Integration
 
@@ -125,7 +140,10 @@ eval/
 - Callbacks already exist for step/tool events
 - No changes to core agent logic
 
-**Span Hierarchy**: `Agent -> Step -> LLM (inferred) -> Tool`
+**Span Hierarchy**: `Agent -> Step -> (LLM, Tool)`
+
+LLM and Tool spans are siblings—both are children of the Step span. When a step executes,
+it may involve an LLM call followed by zero or more tool calls, all at the same hierarchical level.
 
 **Note on LLM Span Inference**: Fantasy's callback system provides OnStepStart/OnStepFinish and
 OnToolCall/OnToolResult, but does not expose direct LLM call hooks. LLM spans are therefore
@@ -262,11 +280,13 @@ fantasy/
 │   └── errors.go                   # API error types (APIError)
 │
 ├── eval/                           # Evaluation framework
-│   ├── scorer.go                   # Scorer interface + built-in scorers
-│   ├── dataset.go                  # Dataset types
+│   ├── scorer.go                   # Scorer interface + built-in heuristic scorers
+│   ├── heuristic.go                # Heuristic scorers: ExactMatch, Contains, Regex, JSONMatch, NumericRange
+│   ├── agent_scorers.go            # Agent-specific scorers: ToolCallTrajectory, StepValidation
+│   ├── dataset.go                  # Dataset and test case types
 │   ├── evaluator.go                # Evaluation runner
-│   ├── llm_judge.go                # LLM-as-judge scorers
-│   └── mlflow_export.go            # Proto converters
+│   ├── llm_judge.go                # LLM-as-judge scorers (Correctness, Guidelines, Relevance, Groundedness)
+│   └── mlflow_export.go            # Converters to proto/Assessment for MLflow export
 │
 ├── tracing/                        # Tracing integration
 │   ├── tracer.go                   # Trace/span builder

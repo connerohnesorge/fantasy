@@ -82,7 +82,7 @@ The system SHALL generate Go structs from MLflow proto files using the Buf toolc
 
 ### Requirement: MLflow REST Client
 
-The system SHALL provide a REST client for MLflow API v3 operations.
+The system SHALL provide a REST client for MLflow API operations (v2 and v3 endpoints).
 
 #### Scenario: Client initialization
 - GIVEN a valid MLflow server URL
@@ -117,15 +117,89 @@ type APIError struct {
     StatusCode int    // HTTP status code (e.g., 404, 500)
     Message    string // Error message from response body
     ErrorCode  string // MLflow error code (e.g., "RESOURCE_DOES_NOT_EXIST")
+    Cause      error  // Underlying error (for error wrapping)
 }
 
-func (e *APIError) Error() string      // Implements error interface
-func (e *APIError) IsNotFound() bool   // Returns true for 404 status codes
-func (e *APIError) IsConflict() bool   // Returns true for 409 status codes
+func (e *APIError) Error() string       // Implements error interface
+func (e *APIError) Unwrap() error       // Returns Cause for errors.Is/As support
+func (e *APIError) IsNotFound() bool    // Returns true for 404 status codes
+func (e *APIError) IsConflict() bool    // Returns true for 409 status codes
 func (e *APIError) IsServerError() bool // Returns true for 5xx status codes
 func (e *APIError) IsUnauthorized() bool // Returns true for 401 status codes
 func (e *APIError) IsForbidden() bool   // Returns true for 403 status codes
+func (e *APIError) IsRateLimited() bool // Returns true for 429 status codes
 func (e *APIError) IsRetryable() bool   // Returns true for 429, 5xx, or connection errors
+```
+
+#### Scenario: ValidationError type definition
+- GIVEN the mlflowclient package
+- WHEN ValidationError is defined
+- THEN it has the following structure:
+```go
+// ValidationError represents a client-side validation failure.
+type ValidationError struct {
+    Field   string // Field that failed validation (e.g., "experimentID", "traceID")
+    Message string // Description of the validation failure
+    Value   any    // The invalid value (for debugging)
+}
+
+func (e *ValidationError) Error() string // Implements error interface
+```
+- AND it is returned for:
+  - Empty required fields (experimentID, traceID, runID)
+  - Invalid format (malformed trace ID, invalid timestamp)
+  - Invalid option combinations (e.g., DeleteTracesOptions with no criteria)
+
+#### Scenario: TimeoutError type definition
+- GIVEN the mlflowclient package
+- WHEN TimeoutError is defined
+- THEN it has the following structure:
+```go
+// TimeoutError represents a request that exceeded its deadline.
+type TimeoutError struct {
+    Operation string        // Operation that timed out (e.g., "StartTrace", "GetRun")
+    Timeout   time.Duration // The timeout that was exceeded
+    Cause     error         // Underlying context.DeadlineExceeded or similar
+}
+
+func (e *TimeoutError) Error() string // Implements error interface
+func (e *TimeoutError) Unwrap() error // Returns Cause for errors.Is/As support
+```
+
+#### Scenario: ConnectionError type definition
+- GIVEN the mlflowclient package
+- WHEN ConnectionError is defined
+- THEN it has the following structure:
+```go
+// ConnectionError represents a network-level failure.
+type ConnectionError struct {
+    URL     string // The URL that failed to connect
+    Message string // Description of the connection failure
+    Cause   error  // Underlying net error
+}
+
+func (e *ConnectionError) Error() string   // Implements error interface
+func (e *ConnectionError) Unwrap() error   // Returns Cause for errors.Is/As support
+func (e *ConnectionError) IsRetryable() bool // Returns true (connection errors are retryable)
+```
+
+#### Scenario: Error wrapping and inspection
+- GIVEN any mlflowclient error type
+- WHEN errors.Is() or errors.As() is used
+- THEN the error chain can be inspected via Unwrap()
+- AND type assertions work correctly:
+```go
+var apiErr *APIError
+if errors.As(err, &apiErr) {
+    if apiErr.IsRetryable() {
+        // Handle retryable error
+    }
+}
+
+var validationErr *ValidationError
+if errors.As(err, &validationErr) {
+    log.Printf("Invalid %s: %v", validationErr.Field, validationErr.Value)
+}
 ```
 
 ### Requirement: Experiment Management
@@ -164,15 +238,57 @@ type SearchExperimentsOptions struct {
 }
 ```
 
+### Requirement: Filter String Syntax
+
+All search operations use a common filter string syntax.
+
+#### Scenario: Filter string syntax
+- GIVEN a search operation that accepts a filter parameter
+- WHEN a filter string is provided
+- THEN it follows MLflow's filter syntax:
+  - Attribute comparison: `attribute_name = 'value'` or `attribute_name != 'value'`
+  - Numeric comparison: `metrics.accuracy > 0.9` or `metrics.loss < 0.1`
+  - LIKE pattern: `name LIKE 'prefix-%'` (% is wildcard)
+  - ILIKE for case-insensitive: `name ILIKE 'test%'`
+  - AND/OR combinations: `metrics.accuracy > 0.9 AND status = 'FINISHED'`
+  - IN lists: `attribute.key IN ('value1', 'value2')`
+- AND supported attribute types vary by entity:
+  - Experiments: `name`, `creation_time`, `lifecycle_stage`
+  - Runs: `metrics.<key>`, `params.<key>`, `tags.<key>`, `attributes.<key>` (run_name, status, etc.)
+  - Traces: `trace_id`, `state`, `request_time`, `tags.<key>`, `trace_metadata.<key>`
+- AND invalid filter syntax returns a ValidationError
+
+### Requirement: Pagination
+
+All search operations support cursor-based pagination.
+
+#### Scenario: Pagination behavior
+- GIVEN a search operation that returns paginated results
+- WHEN results are returned
+- THEN the response includes:
+  - `Items` - the current page of results
+  - `NextPageToken` - token for the next page (empty string if no more pages)
+- AND pagination works as follows:
+  - First request: omit PageToken (or empty string)
+  - Subsequent requests: pass the NextPageToken from previous response
+  - Last page: NextPageToken is empty string
+- AND page tokens are opaque strings (not user-parseable)
+- AND page tokens expire after 1 hour
+- AND using an expired token returns an error (not a partial result)
+
 ### Requirement: Run Management
 
 The system SHALL support MLflow run CRUD and logging operations.
 
 #### Scenario: Create run
-- GIVEN an experiment ID
-- WHEN `client.CreateRun(ctx, experimentID)` is called
+- GIVEN an experiment ID and optional run configuration
+- WHEN `client.CreateRun(ctx, experimentID, opts...)` is called
 - THEN a POST request is made to `/api/2.0/mlflow/runs/create`
 - AND the run metadata is returned
+- AND optional parameters can be passed via functional options:
+  - `WithRunName(name string)` - set run name
+  - `WithStartTime(t int64)` - set start time (milliseconds since epoch)
+  - `WithTags(tags map[string]string)` - set initial tags
 
 #### Scenario: Log batch
 - GIVEN a run ID, metrics, params, and tags
@@ -188,6 +304,34 @@ The system SHALL support MLflow run CRUD and logging operations.
 - AND status must be one of: "RUNNING", "SCHEDULED", "FINISHED", "FAILED", "KILLED"
 - AND endTime is optional (pass 0 to not update)
 
+#### Scenario: Get run
+- GIVEN a run ID
+- WHEN `client.GetRun(ctx, runID)` is called
+- THEN a GET request is made to `/api/2.0/mlflow/runs/get`
+- AND the Run object is returned containing RunInfo and RunData
+- AND RunData includes metrics, params, and tags
+
+#### Scenario: Search runs
+- GIVEN experiment IDs and optional filter criteria
+- WHEN `client.SearchRuns(ctx, opts)` is called
+- THEN a POST request is made to `/api/2.0/mlflow/runs/search`
+- AND matching runs are returned with pagination token
+
+#### Scenario: SearchRunsOptions structure
+- GIVEN the mlflowclient package
+- WHEN SearchRunsOptions is defined
+- THEN it has the following structure:
+```go
+type SearchRunsOptions struct {
+    ExperimentIDs []string   // Experiment IDs to search within (required)
+    Filter        string     // Filter string (e.g., "metrics.accuracy > 0.9")
+    RunViewType   string     // "ACTIVE_ONLY", "DELETED_ONLY", or "ALL" (default: "ACTIVE_ONLY")
+    MaxResults    int        // Maximum results to return (default: 1000, max: 50000)
+    OrderBy       []string   // Order by columns (e.g., ["metrics.accuracy DESC"])
+    PageToken     string     // Token for pagination continuation
+}
+```
+
 #### Scenario: LogBatch with empty inputs
 - GIVEN a LogBatch call with nil or empty slices for metrics, params, or tags
 - WHEN `client.LogBatch(ctx, runID, nil, nil, nil)` is called
@@ -198,24 +342,18 @@ The system SHALL support MLflow run CRUD and logging operations.
 
 The system SHALL support MLflow trace API v3 operations.
 
-#### Scenario: Trace type definition
-- GIVEN the tracing package
-- WHEN the Trace type is defined
-- THEN it wraps the generated `gen/mlflow.TraceInfoV3` proto type
-- AND provides a builder API for constructing traces:
+#### Scenario: Trace type for API operations
+- GIVEN the mlflowclient package needs to send traces to MLflow
+- WHEN the client API trace types are defined
+- THEN `mlflowclient.Trace` wraps the generated `gen/mlflow.TraceInfoV3` proto type for API transport
+- AND conversion functions exist to convert `*tracing.Trace` to `*mlflowclient.Trace`:
 ```go
-// Trace wraps TraceInfoV3 with builder methods.
-type Trace struct {
-    proto *mlflow.TraceInfoV3
-}
-
-// TraceBuilder creates traces incrementally.
-type TraceBuilder struct {
-    trace *Trace
-    spans []*Span
-}
+// ConvertTrace converts a tracing.Trace to the API wire format.
+// This is used when sending traces to the MLflow server.
+func ConvertTrace(t *tracing.Trace) *Trace
 ```
-- AND the client accepts `*Trace` for API operations
+- Note: The `tracing.Trace` type (defined in tracing/spec.md) is used for trace construction,
+  while `mlflowclient.Trace` is used for API transport. They serve different purposes.
 
 #### Scenario: Start trace
 - GIVEN a Trace with experiment location
