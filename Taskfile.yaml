@@ -25,6 +25,32 @@ tasks:
     desc: Run tests for all packages
     cmds:
       - go test ./... -count=1 {{.CLI_ARGS}}
+
+  proto:deps:
+    desc: Install Buf dependencies for proto generation
+    cmds:
+      - cd proto && buf mod update
+
+  proto:gen:
+    desc: Generate Go code from proto files
+    dir: proto
+    cmds:
+      - buf generate
+
+  proto:lint:
+    desc: Lint proto files with Buf
+    dir: proto
+    cmds:
+      - buf lint
+
+  proto:sync:
+    desc: Update proto files from mlflow-ref repository
+    cmds:
+      - echo "Syncing protos from mlflow-ref/mlflow/protos/ to proto/mlflow/"
+      - echo "Note':' This task requires mlflow-ref/mlflow to exist (run task 2.1 first)"
+      - echo "After copying, manually strip ScalaPB extensions and Databricks options"
+      - echo "Then run task proto':gen' to regenerate Go code"
+
   release:
     desc: Create and push a new tag following semver
     vars:

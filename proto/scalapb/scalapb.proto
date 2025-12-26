@@ -1,0 +1,104 @@
+// Stub for ScalaPB extension compatibility
+// MLflow protos reference ScalaPB extensions which are Scala-specific.
+// This stub allows proto files to compile without ScalaPB installed.
+
+syntax = "proto2";
+
+package scalapb;
+
+import "google/protobuf/descriptor.proto";
+
+option java_package = "com.trueaccord.scalapb";
+
+// Field-level options
+extend google.protobuf.FieldOptions {
+  optional FieldOptions field = 1020;
+}
+
+// Message-level options
+extend google.protobuf.MessageOptions {
+  optional MessageOptions message = 1020;
+}
+
+// File-level options
+extend google.protobuf.FileOptions {
+  optional ScalaPbOptions options = 1020;
+}
+
+message ScalaPbOptions {
+  optional string package_name = 1;
+  optional bool flat_package = 2;
+  optional string import_ = 3;
+  repeated string preamble = 4;
+  optional bool single_file = 5;
+  optional bool no_primitive_wrappers = 7;
+  optional bool primitive_wrappers = 6;
+  optional bool collection_type = 8;
+  optional bool preserve_unknown_fields = 9;
+  optional string object_name = 10;
+  optional Scope scope = 11;
+  repeated string companion_extends = 12;
+  optional bool no_default_values_in_constructor = 13;
+  optional bool enum_value_naming = 14;
+  optional bool enum_strip_prefix = 15;
+  optional string bytes_type = 16;
+  optional bool java_conversions = 17;
+  repeated string aux_message_options = 18;
+  repeated string aux_field_options = 19;
+  repeated string aux_enum_options = 20;
+  repeated string aux_enum_value_options = 21;
+  optional bool preprocessors = 22;
+  repeated string field_transformations = 23;
+  optional bool ignore_all_transformations = 24;
+  optional bool retain_source_code_info = 25;
+  optional string map_type = 26;
+  optional bool no_box = 27;
+  optional GettersAndSetters getters_and_setters = 28;
+  optional bool test_only_no_format = 99999;
+}
+
+message MessageOptions {
+  repeated string extends_ = 1;
+  repeated string companion_extends = 2;
+  repeated string annotations = 3;
+  optional string type_ = 4;
+  repeated string companion_annotations = 5;
+  repeated string sealed_oneof_extends = 6;
+  optional bool no_box = 7;
+  optional UnknownFieldsPolicy unknown_fields_policy = 8;
+  optional bool no_default_values_in_constructor = 9;
+  repeated Derive derives = 10;
+}
+
+message FieldOptions {
+  optional string type_ = 1;
+  optional string scala_name = 2;
+  optional string collection_type = 3;
+  repeated string annotations = 4;
+  optional string map_type = 5;
+  optional bool no_box = 30;
+  optional bool no_default_value_in_constructor = 31;
+  repeated Derive derives = 32;
+}
+
+message Derive {
+  optional string name = 1;
+}
+
+enum Scope {
+  PACKAGE = 0;
+  FILE = 1;
+}
+
+enum UnknownFieldsPolicy {
+  UNKNOWN_FIELDS_DEFAULT = 0;
+  PRESERVE = 1;
+  RANDOM_READ = 2;
+  PROLONG = 3;
+}
+
+enum GettersAndSetters {
+  GETTERS_AND_SETTERS_DEFAULT = 0;
+  GETTERS_AND_SETTERS_ENABLED = 1;
+  GETTERS_AND_SETTERS_DISABLED = 2;
+}

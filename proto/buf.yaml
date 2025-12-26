@@ -1,0 +1,16 @@
+# Buf configuration for MLflow proto generation
+# MLflow v3.8.0
+
+version: v1
+name: buf.build/fantasy/mlflow
+deps:
+  - buf.build/googleapis/googleapis
+lint:
+  use:
+    - DEFAULT
+  except:
+    - FIELD_LOWER_SNAKE_CASE
+    - PACKAGE_VERSION_SUFFIX
+breaking:
+  use:
+    - FILE

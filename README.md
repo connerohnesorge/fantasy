@@ -64,7 +64,121 @@ fmt.Println(result.Response.Content.Text())
 
 ## Multi-model? Multi-provider?
 
-Yeah! Fantasy is designed to support a wide variety of providers and models under a single API. While many providers such as Microsoft Azure, Amazon Bedrock, and OpenRouter have dedicated packages in Fantasy, many others work just fine with `openaicompat`, the generic OpenAI-compatible layer. That said, if you find a provider that’s not compatible and needs special treatment, please let us know in an issue (or open a PR).
+Yeah! Fantasy is designed to support a wide variety of providers and models under a single API. While many providers such as Microsoft Azure, Amazon Bedrock, and OpenRouter have dedicated packages in Fantasy, many others work just fine with `openaicompat`, the generic OpenAI-compatible layer. That said, if you find a provider that's not compatible and needs special treatment, please let us know in an issue (or open a PR).
+
+## MLflow Integration
+
+Fantasy includes built-in support for MLflow, enabling observability and evaluation of your AI agents.
+
+### Tracing
+
+Capture distributed traces of agent execution with automatic span hierarchies (Agent → Step → LLM/Tool):
+
+```go
+import (
+    "charm.land/fantasy"
+    "charm.land/fantasy/mlflowclient"
+    "charm.land/fantasy/tracing"
+)
+
+// Create MLflow client
+mlflowClient := mlflowclient.New("http://localhost:5000")
+
+// Create experiment
+expID, _ := mlflowClient.CreateExperiment(ctx, "my-agent-traces", nil)
+
+// Wrap agent with tracing
+baseAgent := fantasy.NewAgent(model, fantasy.WithTools(tools...))
+agent, _ := fantasy.WithTracing(baseAgent, tracing.TracingConfig{
+    Client:       mlflowClient,
+    ExperimentID: expID,
+    AgentName:    "my-agent",
+    ModelName:    "gpt-4",
+})
+
+// Use normally - traces are automatically captured!
+result, _ := agent.Generate(ctx, fantasy.AgentCall{Prompt: "Hello"})
+```
+
+Traces include:
+- Full span hierarchy with timing information
+- LLM token usage and model metadata
+- Tool invocations with inputs/outputs
+- Custom tags for filtering and organization
+
+See the [tracing documentation](tracing/README.md) for more details.
+
+### Evaluation
+
+Systematically evaluate agent quality with built-in scorers and optional MLflow export:
+
+```go
+import "charm.land/fantasy/eval"
+
+// Define test dataset
+dataset := &eval.Dataset{
+    Name: "qa-test",
+    TestCases: []eval.TestCase{
+        {
+            Inputs:       map[string]any{"question": "What is 2+2?"},
+            Expectations: map[string]any{"answer": "4"},
+        },
+    },
+}
+
+// Create scorers
+scorers := []eval.Scorer{
+    eval.NewExactMatch("answer", "answer"),           // Heuristic
+    eval.NewCorrectness(judgeModel),                  // LLM-as-judge
+    eval.NewToolCallTrajectory([]string{"search"}),   // Agent-specific
+}
+
+// Run evaluation
+evaluator := eval.NewEvaluator()
+results, _ := evaluator.Run(ctx, dataset, scorers,
+    eval.WithPredict(myPredictFunc),
+    eval.WithParallelism(10),
+    eval.WithMLflowExport(mlflowClient, expID),
+)
+
+fmt.Printf("Passed: %d/%d\n", results.PassedCases, results.TotalCases)
+```
+
+Built-in scorers include:
+- **Heuristic**: ExactMatch, Contains, Regex, JSONMatch, NumericRange
+- **LLM-as-judge**: Correctness, Guidelines, Relevance, Groundedness
+- **Agent-specific**: ToolCallTrajectory, StepValidation
+
+See the [eval documentation](eval/README.md) for more details.
+
+### MLflow Client
+
+Direct access to MLflow REST API with type-safe protobuf definitions:
+
+```go
+import "charm.land/fantasy/mlflowclient"
+
+client := mlflowclient.New("http://localhost:5000",
+    mlflowclient.WithToken("your-token"),
+)
+
+// Experiment management
+expID, _ := client.CreateExperiment(ctx, "my-experiment", tags)
+exp, _ := client.GetExperiment(ctx, expID)
+
+// Run tracking
+run, _ := client.CreateRun(ctx, expID, mlflowclient.WithRunName("run-1"))
+_ = client.LogBatch(ctx, run.GetRunId(),
+    mlflowclient.WithMetrics(metrics),
+    mlflowclient.WithParams(params),
+)
+
+// Trace management
+trace, _ := client.GetTrace(ctx, traceID)
+traces, _ := client.SearchTraces(ctx, expID, "tags.agent = 'my-agent'", 100)
+```
+
+See the [mlflowclient documentation](mlflowclient/README.md) for more details.
 
 ## Work in Progress
 

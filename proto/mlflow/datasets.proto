@@ -1,0 +1,30 @@
+// Minimal stub of datasets.proto for type compatibility
+// Full datasets functionality is out of scope for this integration
+syntax = "proto2";
+
+package mlflow.datasets;
+
+option java_package = "org.mlflow.api.proto";
+
+// Stub: Dataset message
+message Dataset {
+  optional string name = 1;
+  optional string digest = 2;
+  optional string source_type = 3;
+  optional string source = 4;
+  optional string schema = 5;
+  optional string profile = 6;
+}
+
+// Stub: DatasetRecordSource message
+message DatasetRecordSource {
+  enum SourceType {
+    SOURCE_TYPE_UNSPECIFIED = 0;
+    TRACE = 1;
+    HUMAN = 2;
+    DOCUMENT = 3;
+    CODE = 4;
+  }
+  optional SourceType source_type = 1;
+  optional string source_data = 2;
+}
