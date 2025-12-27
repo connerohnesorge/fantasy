@@ -25,7 +25,7 @@ MLflow's GenAI platform (v3.8.0 and later) provides distributed tracing, evaluat
 - **NEW**: Generate Go code to `proto/gen/mlflow/` package
 - **NEW**: Add Taskfile tasks for proto generation workflow
 
-### 2. MLflow REST Client (`mlflowclient/`)
+### 2. MLflow REST Client (`mlflow/`)
 
 - **NEW**: Thin REST client using protojson marshaling with Bearer token authentication
 - **NEW**: API version strategy (version selection is automatic based on the operation):
@@ -86,7 +86,7 @@ MLflow's GenAI platform (v3.8.0 and later) provides distributed tracing, evaluat
 - **Affected code**:
   - New `proto/` directory with Buf configuration
   - New `proto/gen/mlflow/` generated package
-  - New `mlflowclient/` package
+  - New `mlflow/` package
   - New `eval/` package
   - Agent callbacks integration in `agent.go`
 

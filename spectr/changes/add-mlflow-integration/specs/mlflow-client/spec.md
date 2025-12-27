@@ -96,7 +96,7 @@ The system SHALL provide a REST client for MLflow API operations (v2 and v3 endp
 
 #### Scenario: Client initialization
 - GIVEN a valid MLflow server URL
-- WHEN a new client is created with `mlflowclient.New(baseURL)`
+- WHEN a new client is created with `mlflow.New(baseURL)`
 - THEN the client is configured for HTTP requests
 - AND custom HTTP clients can be provided via options
 
@@ -118,7 +118,7 @@ The system SHALL provide a REST client for MLflow API operations (v2 and v3 endp
 - THEN an APIError is returned with status code and body
 
 #### Scenario: APIError type definition
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN APIError is defined
 - THEN it has the following structure:
 ```go
@@ -142,7 +142,7 @@ func (e *APIError) IsRetryable() bool   // Returns true for 429, 5xx, or connect
 ```
 
 #### Scenario: ValidationError type definition
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN ValidationError is defined
 - THEN it has the following structure:
 ```go
@@ -161,7 +161,7 @@ func (e *ValidationError) Error() string // Implements error interface
   - Invalid option combinations (e.g., DeleteTracesOptions with no criteria)
 
 #### Scenario: TimeoutError type definition
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN TimeoutError is defined
 - THEN it has the following structure:
 ```go
@@ -177,7 +177,7 @@ func (e *TimeoutError) Unwrap() error // Returns Cause for errors.Is/As support
 ```
 
 #### Scenario: ConnectionError type definition
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN ConnectionError is defined
 - THEN it has the following structure:
 ```go
@@ -194,7 +194,7 @@ func (e *ConnectionError) IsRetryable() bool // Returns true (connection errors 
 ```
 
 #### Scenario: Error wrapping and inspection
-- GIVEN any mlflowclient error type
+- GIVEN any mlflow error type
 - WHEN errors.Is() or errors.As() is used
 - THEN the error chain can be inspected via Unwrap()
 - AND type assertions work correctly:
@@ -235,7 +235,7 @@ The system SHALL support MLflow experiment CRUD operations.
 - AND matching experiments are returned with pagination token
 
 #### Scenario: SearchExperimentsOptions structure
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN SearchExperimentsOptions is defined
 - THEN it has the following structure:
 ```go
@@ -328,7 +328,7 @@ The system SHALL support MLflow run CRUD and logging operations.
 - AND matching runs are returned with pagination token
 
 #### Scenario: SearchRunsOptions structure
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN SearchRunsOptions is defined
 - THEN it has the following structure:
 ```go
@@ -353,15 +353,15 @@ type SearchRunsOptions struct {
 The system SHALL support MLflow trace API v3 operations.
 
 #### Scenario: Trace type for API operations
-- GIVEN the mlflowclient package needs to send traces to MLflow
+- GIVEN the mlflow package needs to send traces to MLflow
 - WHEN the client API trace types are defined
-- THEN `mlflowclient.Trace` wraps the generated `proto/gen/mlflow.TraceInfoV3` proto type for API transport
+- THEN `mlflow.Trace` wraps the generated `proto/gen/mlflow.TraceInfoV3` proto type for API transport
 
 **Type Distinction**:
 | Type | Package | Purpose | Contents |
 |------|---------|---------|----------|
 | `tracing.Trace` | tracing | In-memory trace construction | Spans, state, sync primitives |
-| `mlflowclient.Trace` | mlflowclient | API wire format | Proto-compatible fields only |
+| `mlflow.Trace` | mlflow | API wire format | Proto-compatible fields only |
 
 **Conversion**:
 ```go
@@ -375,7 +375,7 @@ The system SHALL support MLflow trace API v3 operations.
 func ConvertTrace(t *tracing.Trace) *Trace
 ```
 
-Note: This is a one-way conversion. `mlflowclient.Trace` cannot be converted back to `tracing.Trace`
+Note: This is a one-way conversion. `mlflow.Trace` cannot be converted back to `tracing.Trace`
 because it lacks the sync primitives and internal state needed for active trace manipulation.
 
 #### Scenario: Start trace
@@ -387,7 +387,7 @@ because it lacks the sync primitives and internal state needed for active trace 
 
 **StartTrace Semantics**:
 - Despite the name "Start", this operation uploads a COMPLETE trace to MLflow
-- The trace must have all spans already populated (tracing.Trace → mlflowclient.Trace conversion happens before this call)
+- The trace must have all spans already populated (tracing.Trace → mlflow.Trace conversion happens before this call)
 - MLflow stores the trace immutably; no spans can be added after StartTrace
 - Use this when the traced execution is complete and you have all span data
 
@@ -412,7 +412,7 @@ other clients that use incremental span addition.
 - AND matching trace infos are returned
 
 #### Scenario: SearchTracesOptions structure
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN SearchTracesOptions is defined
 - THEN it has the following structure:
 ```go
@@ -439,7 +439,7 @@ type SearchTracesOptions struct {
 - If server fails mid-deletion, returns error with partial deletedCount if available
 
 #### Scenario: DeleteTracesOptions structure
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN DeleteTracesOptions is defined
 - THEN it has the following structure:
 ```go
@@ -475,7 +475,7 @@ type DeleteTracesOptions struct {
 The system SHALL support MLflow assessment API operations.
 
 #### Scenario: Assessment type definition
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN Assessment is defined
 - THEN it has the following structure:
 ```go
@@ -543,7 +543,7 @@ type AssessmentError struct {
 The system SHALL support MLflow scorer registration API.
 
 #### Scenario: SerializedScorer structure
-- GIVEN the mlflowclient package
+- GIVEN the mlflow package
 - WHEN SerializedScorer is defined
 - THEN it has the following structure:
 ```go

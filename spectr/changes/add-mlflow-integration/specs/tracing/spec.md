@@ -377,7 +377,7 @@ The system SHALL integrate with Fantasy's existing agent callbacks via TracingCa
 #### Scenario: TracingConfig structure
 - GIVEN a tracing configuration
 - WHEN TracingConfig is created
-- THEN it contains: Client (*mlflowclient.Client), ExperimentID (string)
+- THEN it contains: Client (*mlflow.Client), ExperimentID (string)
 - AND optional: AgentName (string), ModelName (string), SessionID (string), Tags (map[string]string)
 - AND optional: FlushTimeout (time.Duration, default 10s) for trace upload deadline
 - AND SessionID defaults to a new UUID v4 if not provided

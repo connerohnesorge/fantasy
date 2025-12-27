@@ -83,9 +83,9 @@
 **Context**: Type-safe HTTP client for MLflow REST API. Uses protojson for serialization, functional options for configuration.
 **Priority**: Critical path - enables testing with real MLflow server early.
 
-- [ ] 3.1 Create `mlflowclient/` package scaffold
+- [ ] 3.1 Create `mlflow/` package scaffold
   - Context: Foundation for all MLflow communication
-  - Acceptance: Package compiles with `go build ./mlflowclient`
+  - Acceptance: Package compiles with `go build ./mlflow`
 - [ ] 3.2 Implement `client.go` with base HTTP client and protojson marshaling
   - Context: Central HTTP client with `BaseURL`, auth headers, protojson codec
   - Acceptance: `NewClient(baseURL string, opts...)` creates client
@@ -147,7 +147,7 @@
 - [ ] 3.13 Add integration test against local MLflow server (manual)
   - Context: Verify real MLflow compatibility; run `task mlflow:start` first
   - Acceptance: Test can create experiment, trace, assessment end-to-end
-- [ ] 3.14 Write `mlflowclient/README.md` with usage examples
+- [ ] 3.14 Write `mlflow/README.md` with usage examples
   - Context: Quick start guide with code snippets for common operations
   - Acceptance: Examples for creating client, experiment, trace, assessment
 
@@ -320,7 +320,7 @@
 - [ ] 7.4 Implement `EvaluationResultsToMetrics()` converter
   - Context: Aggregate scores → MLflow metrics for plotting/comparison
   - Acceptance: Creates metrics: `scorer_name.mean`, `scorer_name.median`, `pass_rate`
-- [ ] 7.5 Add `WithMLflowExport(client *mlflowclient.Client, experimentID string)` evaluator option
+- [ ] 7.5 Add `WithMLflowExport(client *mlflow.Client, experimentID string)` evaluator option
   - Context: Enable automatic MLflow export during evaluation
   - Acceptance: Option stores client in evaluator config
 - [ ] 7.6 Implement automatic assessment creation on evaluation completion
@@ -463,7 +463,7 @@
 - [ ] 9.1 Verify `proto/README.md` completeness (from 1.8)
   - Context: Should cover buf setup, proto generation, troubleshooting
   - Acceptance: User can generate protos from scratch following README
-- [ ] 9.2 Verify `mlflowclient/README.md` completeness (from 3.14)
+- [ ] 9.2 Verify `mlflow/README.md` completeness (from 3.14)
   - Context: Should have quick start, common operations, error handling
   - Acceptance: User can create client and make basic API calls
 - [ ] 9.3 Verify `eval/README.md` completeness (from 7.8)
@@ -512,7 +512,7 @@
 - [ ] 10.6 Review test coverage for critical paths
   - Context: Ensure adequate coverage for core functionality
   - Acceptance: Run `go test -cover ./...` - aim for >80% coverage on critical packages
-  - Acceptance: Core packages: mlflowclient, eval, tracing should have high coverage
+  - Acceptance: Core packages: mlflow, eval, tracing should have high coverage
 
 ## Dependencies
 

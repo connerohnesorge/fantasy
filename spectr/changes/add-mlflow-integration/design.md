@@ -23,7 +23,7 @@ This section clarifies terminology used across specifications:
 | **State** | tracing | Trace-level state: `IN_PROGRESS`, `OK`, `ERROR` (TraceState) |
 | **Status** | tracing | Span-level status: `UNSET`, `OK`, `ERROR` (SpanStatus) |
 | **Score** | eval | Local evaluation result with Value, Rationale, Error |
-| **Assessment** | mlflowclient | MLflow API entity for trace annotations (maps from Score) |
+| **Assessment** | mlflow | MLflow API entity for trace annotations (maps from Score) |
 | **Trace ID** | tracing | Full trace identifier with `tr-` prefix (e.g., `tr-abc123...`) |
 | **Request ID** | tracing | Deprecated alias for Trace ID (used in MLflow v2 API) |
 
@@ -37,13 +37,13 @@ The tracing system uses distinct types for construction vs. transport:
 | `Span` | tracing | In-memory span data; attached to a Trace |
 | `Tracer` | tracing | Factory/manager that creates Traces; not a data type |
 | `TracingCallbacks` | tracing | Callback handler that manages trace lifecycle |
-| `mlflowclient.Trace` | mlflowclient | Wire format wrapper around proto type for API transport |
+| `mlflow.Trace` | mlflow | Wire format wrapper around proto type for API transport |
 
 **Data Flow**:
 ```
 TracingCallbacks creates → tracing.Trace (with Spans)
                             ↓ ConvertTrace()
-                        mlflowclient.Trace
+                        mlflow.Trace
                             ↓ client.StartTrace()
                         HTTP/JSON to MLflow server
 ```
@@ -52,7 +52,7 @@ TracingCallbacks creates → tracing.Trace (with Spans)
 - Users interact with `TracingConfig` to enable tracing
 - `Trace` and `Span` are internal data structures managed by `TracingCallbacks`
 - `Tracer` is a helper that generates IDs and creates empty Trace instances
-- Conversion to `mlflowclient.Trace` happens automatically during flush
+- Conversion to `mlflow.Trace` happens automatically during flush
 
 ## Goals / Non-Goals
 
@@ -302,7 +302,7 @@ results := evaluator.Run(ctx, dataset, scorers,
 No migration needed - this is purely additive functionality.
 
 ### Adoption Path
-1. Users add `mlflowclient` dependency
+1. Users add `mlflow` dependency
 2. Configure client with MLflow server URL
 3. Enable tracing with `WithTracing()` option
 4. Run evaluations and optionally export to MLflow
@@ -345,7 +345,7 @@ fantasy/
 │           ├── experiments.pb.go
 │           └── scorers.pb.go
 │
-├── mlflowclient/                   # REST client package
+├── mlflow/                   # REST client package
 │   ├── client.go                   # HTTP client with protojson
 │   ├── options.go                  # Functional options pattern
 │   ├── traces.go                   # Trace API methods
@@ -380,7 +380,7 @@ This section documents decisions that ensure consistency across all spec files.
 
 ### Trace Type Field Mapping
 
-| `tracing.Trace` Field | `mlflowclient.Trace` Field | Proto Field | Notes |
+| `tracing.Trace` Field | `mlflow.Trace` Field | Proto Field | Notes |
 |----------------------|---------------------------|-------------|-------|
 | TraceID | TraceID | request_id | Format: `tr-<32hex>` |
 | ExperimentID | ExperimentID | experiment_id | String |
@@ -410,14 +410,14 @@ All packages use a consistent error handling strategy:
 
 | Package | Error Types | When Used |
 |---------|------------|-----------|
-| mlflowclient | APIError, ValidationError, TimeoutError, ConnectionError | HTTP/network operations |
-| tracing | (wraps mlflowclient errors) | Flush failures |
+| mlflow | APIError, ValidationError, TimeoutError, ConnectionError | HTTP/network operations |
+| tracing | (wraps mlflow errors) | Flush failures |
 | eval | EvalError | Evaluation-level errors |
 
 **Error Wrapping Pattern**:
 - All errors implement `error` interface
 - All errors with `Cause` implement `Unwrap()` for `errors.Is/As`
-- Higher-level packages wrap lower-level errors (eval wraps tracing wraps mlflowclient)
+- Higher-level packages wrap lower-level errors (eval wraps tracing wraps mlflow)
 
 ### Timestamp Units
 
@@ -493,6 +493,6 @@ These terms are used consistently across all documents:
 | State | Trace-level: IN_PROGRESS, OK, ERROR | Status |
 | Status | Span-level: UNSET, OK, ERROR | State |
 | Score | eval package result | Assessment |
-| Assessment | mlflowclient API entity | Score |
+| Assessment | mlflow API entity | Score |
 | Flush | Send trace to MLflow | Export |
 | Export | Send eval results to MLflow | Flush |

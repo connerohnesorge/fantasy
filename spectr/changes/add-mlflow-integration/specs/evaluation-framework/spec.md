@@ -596,20 +596,20 @@ The system SHALL support exporting evaluation results to MLflow.
 - WHEN converted to MLflow Assessment
 - THEN the conversion follows these rules:
 ```go
-// ScoreToAssessment converts an eval.Score to an mlflowclient.Assessment
-func ScoreToAssessment(scorerName string, score Score, isLLMJudge bool) *mlflowclient.Assessment {
+// ScoreToAssessment converts an eval.Score to an mlflow.Assessment
+func ScoreToAssessment(scorerName string, score Score, isLLMJudge bool) *mlflow.Assessment {
     sourceType := "CODE"
     if isLLMJudge {
         sourceType = "LLM_JUDGE"
     }
 
-    return &mlflowclient.Assessment{
+    return &mlflow.Assessment{
         Name: scorerName,
-        Source: mlflowclient.AssessmentSource{
+        Source: mlflow.AssessmentSource{
             SourceType: sourceType,
             SourceID:   scorerName,
         },
-        Feedback: &mlflowclient.FeedbackValue{
+        Feedback: &mlflow.FeedbackValue{
             Value: score.Value,
             Error: convertError(score.Error),
         },
