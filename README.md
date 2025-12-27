@@ -66,6 +66,93 @@ fmt.Println(result.Response.Content.Text())
 
 Yeah! Fantasy is designed to support a wide variety of providers and models under a single API. While many providers such as Microsoft Azure, Amazon Bedrock, and OpenRouter have dedicated packages in Fantasy, many others work just fine with `openaicompat`, the generic OpenAI-compatible layer. That said, if you find a provider that’s not compatible and needs special treatment, please let us know in an issue (or open a PR).
 
+## MLflow Integration
+
+Fantasy supports MLflow for distributed tracing and evaluation. This integration provides:
+
+- **Tracing**: Capture hierarchical execution traces (Agent → Step → LLM/Tool)
+- **Evaluation**: Score agent outputs with heuristic and LLM-as-judge scorers
+- **MLflow Export**: Push traces and assessments to MLflow for visualization
+
+### Local MLflow Server
+
+```bash
+# Start MLflow server with PostgreSQL backend
+task mlflow:start
+
+# View logs
+task mlflow:logs
+
+# Stop the server
+task mlflow:stop
+```
+
+The server runs on port 5000. Docker and Docker Compose are required.
+
+### Tracing
+
+```go
+import (
+    "charm.land/fantasy"
+    "charm.land/fantasy/mlflowclient"
+    "charm.land/fantasy/tracing"
+)
+
+// Create MLflow client
+client, _ := mlflowclient.New("http://localhost:5000")
+
+// Create tracing callbacks
+callbacks, _ := tracing.WrapAgentOptions(client, tracing.TracingConfig{
+    ExperimentID: "my-experiment",
+    AgentName:    "my-agent",
+})
+cbs := callbacks.StreamCallbacks()
+
+// Create agent with tracing enabled
+agent := fantasy.NewAgent(model, fantasy.WithTracingCallbacks(fantasy.TracingCallbackConfig{
+    OnAgentStart:  cbs.OnAgentStart,
+    OnAgentFinish: cbs.OnAgentFinish,
+    OnStepStart:   cbs.OnStepStart,
+    OnStepFinish:  cbs.OnStepFinish,
+    OnToolCall:    cbs.OnToolCall,
+    OnToolResult:  cbs.OnToolResult,
+}))
+
+// All Stream calls are automatically traced
+result, _ := agent.Stream(ctx, fantasy.AgentStreamCall{
+    Prompt: "Find cute dogs in LA",
+})
+```
+
+### Evaluation
+
+```go
+import "charm.land/fantasy/eval"
+
+// Create test dataset
+dataset := eval.NewDataset("qa-tests",
+    eval.NewTestCase(
+        map[string]any{"prompt": "What is 2+2?"},
+        map[string]any{"expected": "4"},
+    ),
+)
+
+// Define scorers
+scorers := []eval.Scorer{
+    eval.NewExactMatchScorer("output", "expected"),
+    eval.NewContainsScorer("output", "4"),
+}
+
+// Run evaluation
+evaluator := eval.NewEvaluator()
+results, _ := evaluator.Run(ctx, dataset, scorers,
+    eval.WithPredict(myPredictFunc),
+    eval.WithMLflowExport(client, experimentID),
+)
+```
+
+See the [mlflowclient](mlflowclient/README.md), [tracing](tracing/README.md), and [eval](eval/README.md) packages for full documentation.
+
 ## Work in Progress
 
 We built Fantasy to power [Crush](https://github.com/charmbracelet/crush), a hot coding agent for glamourously invincible development. Given that, Fantasy does not yet support things like:

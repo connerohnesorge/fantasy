@@ -1,0 +1,97 @@
+// MLflow scorer registration types - curated from MLflow v3.8.0
+// These are the message types used for REST API scorer endpoints.
+syntax = "proto3";
+
+package mlflow;
+
+option go_package = "charm.land/fantasy/proto/gen/mlflow";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// SerializedScorer represents a scorer definition for registration.
+message SerializedScorer {
+  // Scorer type: "CODE", "LLM_JUDGE", or "HEURISTIC".
+  string scorer_type = 1;
+
+  // Scorer name.
+  string name = 2;
+
+  // Human-readable description.
+  string description = 3;
+
+  // Scorer-specific configuration (JSON-serializable).
+  google.protobuf.Struct config = 4;
+}
+
+// ScorerVersion represents a specific version of a scorer.
+message ScorerVersion {
+  // Version number.
+  int64 version = 1;
+
+  // The scorer definition.
+  SerializedScorer scorer = 2;
+
+  // Creation time of this version.
+  google.protobuf.Timestamp create_time = 3;
+}
+
+// RegisterScorer request.
+message RegisterScorerRequest {
+  // ID of the experiment.
+  string experiment_id = 1;
+
+  // Name of the scorer.
+  string name = 2;
+
+  // The scorer definition.
+  SerializedScorer scorer = 3;
+}
+
+// RegisterScorer response.
+message RegisterScorerResponse {
+  // The registered scorer version.
+  ScorerVersion scorer_version = 1;
+}
+
+// ListScorers request.
+message ListScorersRequest {
+  // ID of the experiment.
+  string experiment_id = 1;
+}
+
+// ListScorers response.
+message ListScorersResponse {
+  // Latest versions of all scorers in the experiment.
+  repeated ScorerVersion scorers = 1;
+}
+
+// GetScorer request.
+message GetScorerRequest {
+  // ID of the experiment.
+  string experiment_id = 1;
+
+  // Name of the scorer.
+  string name = 2;
+
+  // Version to fetch (0 for latest).
+  int64 version = 3;
+}
+
+// GetScorer response.
+message GetScorerResponse {
+  // The requested scorer version.
+  ScorerVersion scorer_version = 1;
+}
+
+// DeleteScorer request.
+message DeleteScorerRequest {
+  // ID of the experiment.
+  string experiment_id = 1;
+
+  // Name of the scorer to delete.
+  string name = 2;
+}
+
+// DeleteScorer response (empty on success).
+message DeleteScorerResponse {}

@@ -1,0 +1,12 @@
+# Buf code generation configuration
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: charm.land/fantasy/proto/gen
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: gen
+    opt:
+      - paths=source_relative

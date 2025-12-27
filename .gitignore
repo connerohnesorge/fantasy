@@ -40,3 +40,6 @@ Thumbs.db
 
 manpages/
 *.patch
+
+# Proto generated code
+proto/gen/

@@ -41,3 +41,54 @@ tasks:
       - git tag --annotate --sign -m "{{.NEXT}}" {{.NEXT}} {{.CLI_ARGS}}
       - echo "Pushing {{.NEXT}}..."
       - git push origin main --follow-tags
+
+  # MLflow Server Tasks
+  mlflow:start:
+    desc: Start local MLflow server with PostgreSQL backend
+    cmds:
+      - docker compose up -d
+
+  mlflow:stop:
+    desc: Stop MLflow server and PostgreSQL
+    cmds:
+      - docker compose down
+
+  mlflow:logs:
+    desc: View MLflow server logs
+    cmds:
+      - docker compose logs -f mlflow
+
+  # Proto Generation Tasks
+  proto:deps:
+    desc: Install Buf CLI and protoc-gen-go
+    cmds:
+      - go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+      - |
+        if ! command -v buf &> /dev/null; then
+          echo "Installing Buf CLI..."
+          curl -sSL https://github.com/bufbuild/buf/releases/download/v1.47.2/buf-$(uname -s)-$(uname -m) -o /tmp/buf
+          chmod +x /tmp/buf
+          sudo mv /tmp/buf /usr/local/bin/buf
+        fi
+
+  proto:gen:
+    desc: Generate Go code from proto files
+    dir: proto
+    cmds:
+      - buf generate
+
+  proto:lint:
+    desc: Lint proto files
+    dir: proto
+    cmds:
+      - buf lint
+
+  proto:sync:
+    desc: Sync MLflow protos from mlflow-ref (after updating mlflow-ref)
+    cmds:
+      - |
+        echo "To update protos:"
+        echo "1. Update mlflow-ref: cd mlflow-ref/mlflow && git pull"
+        echo "2. Copy protos: cp mlflow-ref/mlflow/protos/*.proto proto/mlflow/"
+        echo "3. Strip ScalaPB: Run proto:gen to verify"
+        echo "4. Update version in proto/buf.yaml"

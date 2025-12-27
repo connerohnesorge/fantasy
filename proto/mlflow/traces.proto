@@ -1,0 +1,160 @@
+// MLflow trace request and response types - curated from MLflow v3.8.0
+// These are the message types used for REST API v3 trace endpoints.
+syntax = "proto3";
+
+package mlflow;
+
+option go_package = "charm.land/fantasy/proto/gen/mlflow";
+
+import "mlflow/service.proto";
+import "mlflow/assessments.proto";
+
+// StartTrace request (uploads a complete trace).
+message StartTraceRequest {
+  // The trace to create (with all spans populated).
+  Trace trace = 1;
+}
+
+// StartTrace response.
+message StartTraceResponse {
+  // The created trace.
+  Trace trace = 1;
+}
+
+// GetTrace request.
+message GetTraceRequest {
+  // ID of the trace to fetch.
+  string trace_id = 1;
+
+  // Whether to allow returning incomplete traces.
+  bool allow_partial = 2;
+}
+
+// GetTrace response.
+message GetTraceResponse {
+  // The requested trace.
+  Trace trace = 1;
+}
+
+// SearchTraces request.
+message SearchTracesRequest {
+  // Experiment IDs to search within.
+  repeated string experiment_ids = 1;
+
+  // Filter expression (e.g., "state = 'OK'").
+  string filter = 2;
+
+  // Maximum number of traces to return.
+  int64 max_results = 3;
+
+  // Token for the page of traces to fetch.
+  string page_token = 4;
+
+  // Order by columns (e.g., ["timestamp_ms DESC"]).
+  repeated string order_by = 5;
+}
+
+// SearchTraces response.
+message SearchTracesResponse {
+  // Trace infos that match the search criteria.
+  repeated TraceInfoV3 traces = 1;
+
+  // Token for the next page of results.
+  string next_page_token = 2;
+}
+
+// DeleteTraces request.
+message DeleteTracesRequest {
+  // ID of the experiment containing traces to delete.
+  string experiment_id = 1;
+
+  // Maximum number of traces to delete.
+  int64 max_traces = 2;
+
+  // Delete traces older than this timestamp (milliseconds since epoch).
+  int64 max_timestamp_ms = 3;
+
+  // Filter expression to select traces for deletion.
+  string filter = 4;
+}
+
+// DeleteTraces response.
+message DeleteTracesResponse {
+  // Number of traces deleted.
+  int64 deleted_count = 1;
+}
+
+// SetTraceTag request.
+message SetTraceTagRequest {
+  // ID of the trace.
+  string trace_id = 1;
+
+  // Tag key.
+  string key = 2;
+
+  // Tag value.
+  string value = 3;
+}
+
+// SetTraceTag response (empty on success).
+message SetTraceTagResponse {}
+
+// DeleteTraceTag request.
+message DeleteTraceTagRequest {
+  // ID of the trace.
+  string trace_id = 1;
+
+  // Tag key.
+  string key = 2;
+}
+
+// DeleteTraceTag response (empty on success).
+message DeleteTraceTagResponse {}
+
+// CreateAssessment request.
+message CreateAssessmentRequest {
+  // ID of the trace to attach the assessment to.
+  string trace_id = 1;
+
+  // The assessment to create.
+  Assessment assessment = 2;
+}
+
+// CreateAssessment response.
+message CreateAssessmentResponse {
+  // The created assessment.
+  Assessment assessment = 1;
+}
+
+// UpdateAssessment request.
+message UpdateAssessmentRequest {
+  // ID of the trace.
+  string trace_id = 1;
+
+  // ID of the assessment to update.
+  string assessment_id = 2;
+
+  // The updated assessment data.
+  Assessment assessment = 3;
+
+  // Fields to update (e.g., ["rationale", "feedback.value"]).
+  repeated string update_mask = 4;
+}
+
+// UpdateAssessment response.
+message UpdateAssessmentResponse {
+  // The updated assessment.
+  Assessment assessment = 1;
+}
+
+// DeleteAssessment request.
+message DeleteAssessmentRequest {
+  // ID of the trace.
+  string trace_id = 1;
+
+  // ID of the assessment to delete.
+  string assessment_id = 2;
+}
+
+// DeleteAssessment response (empty on success).
+message DeleteAssessmentResponse {}

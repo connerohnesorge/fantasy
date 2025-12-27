@@ -1,0 +1,209 @@
+// MLflow core tracing types - curated from MLflow v3.8.0
+// This is a curated subset of MLflow proto definitions for Fantasy's MLflow integration.
+// Original source: mlflow-ref/mlflow/mlflow/protos/service.proto
+syntax = "proto3";
+
+package mlflow;
+
+option go_package = "charm.land/fantasy/proto/gen/mlflow";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "opentelemetry/proto/trace/v1/trace.proto";
+import "mlflow/assessments.proto";
+
+// TraceState represents the execution state of a trace.
+enum TraceState {
+  TRACE_STATE_UNSPECIFIED = 0;
+  // The operation being traced was successful.
+  OK = 1;
+  // The operation being traced failed.
+  ERROR = 2;
+  // The operation being traced is still in progress.
+  IN_PROGRESS = 3;
+}
+
+// Trace contains the full trace data including spans.
+message Trace {
+  TraceInfoV3 trace_info = 1;
+  repeated opentelemetry.proto.trace.v1.Span spans = 2;
+}
+
+// TraceLocation identifies where a trace is stored.
+message TraceLocation {
+  enum TraceLocationType {
+    TRACE_LOCATION_TYPE_UNSPECIFIED = 0;
+    MLFLOW_EXPERIMENT = 1;
+    INFERENCE_TABLE = 2;
+  }
+  TraceLocationType type = 1;
+
+  message MlflowExperimentLocation {
+    string experiment_id = 1;
+  }
+
+  message InferenceTableLocation {
+    string full_table_name = 1;
+  }
+
+  oneof identifier {
+    MlflowExperimentLocation mlflow_experiment = 2;
+    InferenceTableLocation inference_table = 3;
+  }
+}
+
+// TraceInfoV3 contains metadata about a trace.
+message TraceInfoV3 {
+  // The primary key associated with the trace.
+  string trace_id = 1;
+
+  // Client supplied request ID associated with the trace.
+  string client_request_id = 2;
+
+  // Location where the trace is stored.
+  TraceLocation trace_location = 3;
+
+  // Preview of the request to the model/agent (truncated to 10KB).
+  string request_preview = 12;
+
+  // Preview of the response from the model/agent (truncated to 10KB).
+  string response_preview = 13;
+
+  // Start time of the trace.
+  google.protobuf.Timestamp request_time = 6;
+
+  // Execution time of the trace.
+  google.protobuf.Duration execution_duration = 7;
+
+  // Execution state of the trace.
+  TraceState state = 8;
+
+  // Metadata associated with the trace (model_id, session_id, etc.).
+  map<string, string> trace_metadata = 9;
+
+  // Assessments attached to the trace.
+  repeated Assessment assessments = 10;
+
+  // Mutable, user-defined tags for the trace.
+  map<string, string> tags = 11;
+}
+
+// RunStatus represents the status of a run.
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  // Run is actively running.
+  RUNNING = 1;
+  // Run is scheduled to run at a later time.
+  SCHEDULED = 2;
+  // Run has completed successfully.
+  FINISHED = 3;
+  // Run execution failed.
+  FAILED = 4;
+  // Run was killed by user.
+  KILLED = 5;
+}
+
+// Experiment represents an MLflow experiment.
+message Experiment {
+  // Unique identifier for the experiment.
+  string experiment_id = 1;
+
+  // Human readable name that identifies the experiment.
+  string name = 2;
+
+  // Location where artifacts for the experiment are stored.
+  string artifact_location = 3;
+
+  // Current life cycle stage: "active" or "deleted".
+  string lifecycle_stage = 4;
+
+  // Last update time in milliseconds since epoch.
+  int64 last_update_time = 5;
+
+  // Creation time in milliseconds since epoch.
+  int64 creation_time = 6;
+
+  // Tags: Additional metadata key-value pairs.
+  repeated ExperimentTag tags = 7;
+}
+
+// ExperimentTag is a tag for an experiment.
+message ExperimentTag {
+  string key = 1;
+  string value = 2;
+}
+
+// Run represents a single run.
+message Run {
+  // Run metadata.
+  RunInfo info = 1;
+  // Run data.
+  RunData data = 2;
+}
+
+// RunInfo contains metadata of a single run.
+message RunInfo {
+  // Unique identifier for the run.
+  string run_id = 15;
+
+  // The name of the run.
+  string run_name = 3;
+
+  // The experiment ID.
+  string experiment_id = 2;
+
+  // Current status of the run.
+  RunStatus status = 7;
+
+  // Unix timestamp of when the run started in milliseconds.
+  int64 start_time = 8;
+
+  // Unix timestamp of when the run ended in milliseconds.
+  int64 end_time = 9;
+
+  // URI of the directory where artifacts should be uploaded.
+  string artifact_uri = 13;
+
+  // Current life cycle stage: "active" or "deleted".
+  string lifecycle_stage = 14;
+}
+
+// RunData contains run metrics, params, and tags.
+message RunData {
+  // Run metrics.
+  repeated Metric metrics = 1;
+  // Run parameters.
+  repeated Param params = 2;
+  // Additional metadata key-value pairs.
+  repeated RunTag tags = 3;
+}
+
+// Metric associated with a run.
+message Metric {
+  // Key identifying this metric.
+  string key = 1;
+
+  // Value associated with this metric.
+  double value = 2;
+
+  // The timestamp at which this metric was recorded.
+  int64 timestamp = 3;
+
+  // Step at which to log the metric.
+  int64 step = 4;
+}
+
+// Param associated with a run.
+message Param {
+  // Key identifying this param.
+  string key = 1;
+
+  // Value associated with this param.
+  string value = 2;
+}
+
+// RunTag is a tag for a run.
+message RunTag {
+  string key = 1;
+  string value = 2;
+}
