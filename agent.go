@@ -148,6 +148,15 @@ type agentSettings struct {
 	prepareStep    PrepareStepFunction
 	repairToolCall RepairToolCallFunction
 	onRetry        OnRetryCallback
+
+	// Stream callbacks for tracing integration
+	onAgentStart  OnAgentStartFunc
+	onAgentFinish OnAgentFinishFunc
+	onStepStart   OnStepStartFunc
+	onStepFinish  OnStepFinishFunc
+	onToolCall    OnToolCallFunc
+	onToolResult  OnToolResultFunc
+	onError       OnErrorFunc
 }
 
 // AgentCall represents a call to an agent.
@@ -740,6 +749,10 @@ func (a *agent) Stream(ctx context.Context, opts AgentStreamCall) (*AgentResult,
 	}
 
 	call = a.prepareCall(call)
+
+	// Merge agent-level callbacks with call-level callbacks
+	// Call-level callbacks take precedence if both are set
+	opts = a.mergeCallbacks(opts)
 
 	initialPrompt, err := a.createPrompt(a.settings.systemPrompt, call.Prompt, call.Messages, call.Files...)
 	if err != nil {
@@ -1407,6 +1420,34 @@ func addUsage(a, b Usage) Usage {
 	}
 }
 
+// mergeCallbacks merges agent-level tracing callbacks with call-level callbacks.
+// Call-level callbacks take precedence if both are set.
+func (a *agent) mergeCallbacks(opts AgentStreamCall) AgentStreamCall {
+	// Use agent settings as defaults, call-level callbacks take precedence
+	if opts.OnAgentStart == nil && a.settings.onAgentStart != nil {
+		opts.OnAgentStart = a.settings.onAgentStart
+	}
+	if opts.OnAgentFinish == nil && a.settings.onAgentFinish != nil {
+		opts.OnAgentFinish = a.settings.onAgentFinish
+	}
+	if opts.OnStepStart == nil && a.settings.onStepStart != nil {
+		opts.OnStepStart = a.settings.onStepStart
+	}
+	if opts.OnStepFinish == nil && a.settings.onStepFinish != nil {
+		opts.OnStepFinish = a.settings.onStepFinish
+	}
+	if opts.OnToolCall == nil && a.settings.onToolCall != nil {
+		opts.OnToolCall = a.settings.onToolCall
+	}
+	if opts.OnToolResult == nil && a.settings.onToolResult != nil {
+		opts.OnToolResult = a.settings.onToolResult
+	}
+	if opts.OnError == nil && a.settings.onError != nil {
+		opts.OnError = a.settings.onError
+	}
+	return opts
+}
+
 // WithHeaders sets the headers for the agent.
 func WithHeaders(headers map[string]string) AgentOption {
 	return func(s *agentSettings) {
@@ -1418,5 +1459,44 @@ func WithHeaders(headers map[string]string) AgentOption {
 func WithProviderOptions(providerOptions ProviderOptions) AgentOption {
 	return func(s *agentSettings) {
 		s.providerOptions = providerOptions
+	}
+}
+
+// TracingCallbackConfig holds callback functions for tracing integration.
+// These callbacks are automatically applied to all Stream calls made through the agent.
+type TracingCallbackConfig struct {
+	OnAgentStart  OnAgentStartFunc
+	OnAgentFinish OnAgentFinishFunc
+	OnStepStart   OnStepStartFunc
+	OnStepFinish  OnStepFinishFunc
+	OnToolCall    OnToolCallFunc
+	OnToolResult  OnToolResultFunc
+	OnError       OnErrorFunc
+}
+
+// WithTracingCallbacks configures the agent with tracing callbacks that are automatically
+// applied to all Stream calls. This enables seamless integration with MLflow tracing.
+//
+// Example usage with tracing package:
+//
+//	callbacks, tracer := tracing.WrapAgentOptions(mlflowClient, tracingConfig)
+//	agent := fantasy.NewAgent(model, fantasy.WithTracingCallbacks(fantasy.TracingCallbackConfig{
+//	    OnAgentStart:  callbacks.StreamCallbacks().OnAgentStart,
+//	    OnAgentFinish: callbacks.StreamCallbacks().OnAgentFinish,
+//	    OnStepStart:   callbacks.StreamCallbacks().OnStepStart,
+//	    OnStepFinish:  callbacks.StreamCallbacks().OnStepFinish,
+//	    OnToolCall:    callbacks.StreamCallbacks().OnToolCall,
+//	    OnToolResult:  callbacks.StreamCallbacks().OnToolResult,
+//	    OnError:       callbacks.StreamCallbacks().OnError,
+//	}))
+func WithTracingCallbacks(config TracingCallbackConfig) AgentOption {
+	return func(s *agentSettings) {
+		s.onAgentStart = config.OnAgentStart
+		s.onAgentFinish = config.OnAgentFinish
+		s.onStepStart = config.OnStepStart
+		s.onStepFinish = config.OnStepFinish
+		s.onToolCall = config.OnToolCall
+		s.onToolResult = config.OnToolResult
+		s.onError = config.OnError
 	}
 }

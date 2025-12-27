@@ -1,0 +1,114 @@
+// MLflow assessment types - curated from MLflow v3.8.0
+// Original source: mlflow-ref/mlflow/mlflow/protos/assessments.proto
+syntax = "proto3";
+
+package mlflow;
+
+option go_package = "charm.land/fantasy/proto/gen/mlflow";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// AssessmentSource identifies where an assessment came from.
+message AssessmentSource {
+  // Type of the assessment source.
+  enum SourceType {
+    SOURCE_TYPE_UNSPECIFIED = 0;
+    // Assessment from a human.
+    HUMAN = 1;
+    // Assessment from an LLM Judge.
+    LLM_JUDGE = 2;
+    // Code-based assessment (e.g. Python UDF or Go scorer).
+    CODE = 3;
+  }
+
+  // The type of the source.
+  SourceType source_type = 1;
+
+  // Identifier for the source.
+  // For human: user name; for LLM judge: judge source; for code: scorer name.
+  string source_id = 2;
+}
+
+// AssessmentError represents an error encountered while computing an assessment.
+message AssessmentError {
+  // Error code.
+  string error_code = 1;
+
+  // Error message.
+  string error_message = 2;
+
+  // Stack trace of the error (truncated to 1000 characters).
+  string stack_trace = 3;
+}
+
+// Expectation represents expected values or guidelines for model outputs.
+message Expectation {
+  // The expectation value. Supports numeric, boolean, text, or list of strings.
+  google.protobuf.Value value = 2;
+
+  // Serialized value for complex types.
+  message SerializedValue {
+    // Serialization format (e.g. "JSON_FORMAT").
+    string serialization_format = 1;
+    // The serialized value.
+    string value = 2;
+  }
+
+  // Alternative to value for complex serialized types.
+  SerializedValue serialized_value = 3;
+}
+
+// Feedback represents feedback provided on model/agent output.
+message Feedback {
+  // Value of the feedback-based assessment.
+  // Supports numeric, boolean, text, or list of strings.
+  google.protobuf.Value value = 2;
+
+  // An error encountered while generating the feedback.
+  AssessmentError error = 3;
+}
+
+// Assessment contains data and metadata for an assessment of a trace.
+message Assessment {
+  // Unique ID of the assessment.
+  string assessment_id = 1;
+
+  // Name of the assessment (must not contain ".").
+  string assessment_name = 2;
+
+  // ID of the trace this assessment is associated with.
+  string trace_id = 3;
+
+  // ID of the span if the assessment is for a particular span.
+  string span_id = 4;
+
+  // The source this assessment came from.
+  AssessmentSource source = 5;
+
+  // The creation time of this assessment.
+  google.protobuf.Timestamp create_time = 6;
+
+  // The last update time of this assessment.
+  google.protobuf.Timestamp last_update_time = 7;
+
+  // An Assessment is either Feedback or Expectation.
+  oneof value {
+    // The feedback on the trace from this assessment.
+    Feedback feedback = 9;
+    // A representation of the expected response from the agent.
+    Expectation expectation = 10;
+  }
+
+  // Justification for the assessment.
+  string rationale = 11;
+
+  // Additional metadata describing the assessment.
+  map<string, string> metadata = 13;
+
+  // The ID of the assessment which this assessment overrides.
+  string overrides = 14;
+
+  // Whether this assessment is valid (not superseded).
+  bool valid = 15;
+}

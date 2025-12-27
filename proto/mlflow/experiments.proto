@@ -1,0 +1,225 @@
+// MLflow experiment/run request and response types - curated from MLflow v3.8.0
+// These are the message types used for REST API requests/responses.
+syntax = "proto3";
+
+package mlflow;
+
+option go_package = "charm.land/fantasy/proto/gen/mlflow";
+
+import "mlflow/service.proto";
+
+// CreateExperiment request.
+message CreateExperimentRequest {
+  // Experiment name. Must be unique.
+  string name = 1;
+
+  // Location where all artifacts for the experiment are stored.
+  string artifact_location = 2;
+
+  // Tags for the experiment.
+  repeated ExperimentTag tags = 3;
+}
+
+// CreateExperiment response.
+message CreateExperimentResponse {
+  // Unique identifier for the created experiment.
+  string experiment_id = 1;
+}
+
+// GetExperiment request.
+message GetExperimentRequest {
+  // ID of the experiment to fetch.
+  string experiment_id = 1;
+}
+
+// GetExperiment response.
+message GetExperimentResponse {
+  // Experiment details.
+  Experiment experiment = 1;
+}
+
+// SearchExperiments request.
+message SearchExperimentsRequest {
+  // Maximum number of experiments to return.
+  int64 max_results = 1;
+
+  // Token for the page of experiments to fetch.
+  string page_token = 2;
+
+  // Filter expression (e.g., "name LIKE 'test-%'").
+  string filter = 3;
+
+  // Order by columns (e.g., ["name ASC", "creation_time DESC"]).
+  repeated string order_by = 4;
+
+  // View type: "ACTIVE_ONLY", "DELETED_ONLY", or "ALL".
+  string view_type = 5;
+}
+
+// SearchExperiments response.
+message SearchExperimentsResponse {
+  // Experiments that match the search criteria.
+  repeated Experiment experiments = 1;
+
+  // Token for the next page of results.
+  string next_page_token = 2;
+}
+
+// UpdateExperiment request.
+message UpdateExperimentRequest {
+  // ID of the experiment to update.
+  string experiment_id = 1;
+
+  // New name for the experiment.
+  string new_name = 2;
+}
+
+// UpdateExperiment response (empty on success).
+message UpdateExperimentResponse {}
+
+// DeleteExperiment request.
+message DeleteExperimentRequest {
+  // ID of the experiment to delete.
+  string experiment_id = 1;
+}
+
+// DeleteExperiment response (empty on success).
+message DeleteExperimentResponse {}
+
+// CreateRun request.
+message CreateRunRequest {
+  // ID of the experiment under which to create the run.
+  string experiment_id = 1;
+
+  // Name of the run.
+  string run_name = 2;
+
+  // Unix timestamp in milliseconds of the run start time.
+  int64 start_time = 3;
+
+  // Tags to set on the run.
+  repeated RunTag tags = 4;
+}
+
+// CreateRun response.
+message CreateRunResponse {
+  // The newly created run.
+  Run run = 1;
+}
+
+// GetRun request.
+message GetRunRequest {
+  // ID of the run to fetch.
+  string run_id = 1;
+}
+
+// GetRun response.
+message GetRunResponse {
+  // The requested run.
+  Run run = 1;
+}
+
+// UpdateRun request.
+message UpdateRunRequest {
+  // ID of the run to update.
+  string run_id = 1;
+
+  // Updated status of the run.
+  RunStatus status = 2;
+
+  // Unix timestamp in milliseconds of the run end time.
+  int64 end_time = 3;
+
+  // Updated name for the run.
+  string run_name = 4;
+}
+
+// UpdateRun response.
+message UpdateRunResponse {
+  // Updated run info.
+  RunInfo run_info = 1;
+}
+
+// DeleteRun request.
+message DeleteRunRequest {
+  // ID of the run to delete.
+  string run_id = 1;
+}
+
+// DeleteRun response (empty on success).
+message DeleteRunResponse {}
+
+// SearchRuns request.
+message SearchRunsRequest {
+  // List of experiment IDs to search over.
+  repeated string experiment_ids = 1;
+
+  // Filter expression (e.g., "metrics.accuracy > 0.9").
+  string filter = 2;
+
+  // View type: "ACTIVE_ONLY", "DELETED_ONLY", or "ALL".
+  string run_view_type = 3;
+
+  // Maximum number of runs to return.
+  int64 max_results = 4;
+
+  // Order by columns (e.g., ["metrics.accuracy DESC"]).
+  repeated string order_by = 5;
+
+  // Token for the page of runs to fetch.
+  string page_token = 6;
+}
+
+// SearchRuns response.
+message SearchRunsResponse {
+  // Runs that match the search criteria.
+  repeated Run runs = 1;
+
+  // Token for the next page of results.
+  string next_page_token = 2;
+}
+
+// LogBatch request.
+message LogBatchRequest {
+  // ID of the run to log data to.
+  string run_id = 1;
+
+  // Metrics to log.
+  repeated Metric metrics = 2;
+
+  // Params to log.
+  repeated Param params = 3;
+
+  // Tags to log.
+  repeated RunTag tags = 4;
+}
+
+// LogBatch response (empty on success).
+message LogBatchResponse {}
+
+// SetTag request.
+message SetTagRequest {
+  // ID of the run.
+  string run_id = 1;
+
+  // Tag key.
+  string key = 2;
+
+  // Tag value.
+  string value = 3;
+}
+
+// SetTag response (empty on success).
+message SetTagResponse {}
+
+// DeleteTag request.
+message DeleteTagRequest {
+  // ID of the run.
+  string run_id = 1;
+
+  // Tag key.
+  string key = 2;
+}
+
+// DeleteTag response (empty on success).
+message DeleteTagResponse {}

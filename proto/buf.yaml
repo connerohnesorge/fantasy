@@ -1,0 +1,21 @@
+# Buf configuration for Fantasy MLflow proto generation
+# MLflow v3.8.0
+version: v2
+modules:
+  - path: .
+    name: buf.build/fantasy/mlflow
+    excludes:
+      - google/protobuf
+      - scalapb
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_VERSION_SUFFIX
+    - ENUM_VALUE_PREFIX
+    - ENUM_ZERO_VALUE_SUFFIX
+    - SERVICE_SUFFIX
+    - FIELD_NOT_REQUIRED
+breaking:
+  use:
+    - FILE

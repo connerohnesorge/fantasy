@@ -1,0 +1,113 @@
+// ScalaPB extension stub for MLflow proto compatibility.
+// MLflow protos reference ScalaPB options which are not needed for Go generation.
+// This stub file provides empty extension definitions to satisfy proto compilation.
+syntax = "proto2";
+
+package scalapb;
+
+option go_package = "charm.land/fantasy/proto/gen/scalapb";
+
+import "google/protobuf/descriptor.proto";
+
+// Stub message for ScalaPB options - not used in Go generation.
+message ScalaPbOptions {
+  optional string package_name = 1;
+  repeated string import = 2;
+  repeated string preamble = 3;
+  optional bool single_file = 4;
+  optional bool no_primitive_wrappers = 5;
+  optional bool flat_package = 6;
+  repeated string aux_message_options = 7;
+  repeated string aux_field_options = 8;
+  repeated string aux_enum_options = 9;
+  repeated string aux_enum_value_options = 10;
+  optional bool preserve_unknown_fields = 11;
+  optional bool object_name = 12;
+  optional string scope = 13;
+  optional bool lenses = 14;
+  optional bool retain_source_code_info = 15;
+  optional string map_type = 16;
+  optional bool no_default_values_in_constructor = 17;
+  optional string enum_value_naming = 18;
+  optional bool enum_strip_prefix = 19;
+  optional bool bytes_type = 20;
+  optional string collection_type = 21;
+  optional bool getters = 22;
+  optional bool scala3_sources = 23;
+  optional bool public_constructor_parameters = 24;
+  optional bool test_only_no_java_conversions = 25;
+  optional bool ignore_all_transformations = 26;
+}
+
+message MessageOptions {
+  repeated string extends = 1;
+  repeated string companion_extends = 2;
+  repeated string annotations = 3;
+  optional string type = 4;
+  repeated string companion_annotations = 5;
+  repeated string sealed_oneof_extends = 6;
+  optional bool no_box = 7;
+  optional bool unknown_fields_annotations = 8;
+  optional bool no_default_values_in_constructor = 9;
+  repeated string derives = 10;
+  repeated string sealed_oneof_derives = 11;
+  optional bool sealed_oneof_empty_extends = 12;
+  repeated string sealed_oneof_companion_extends = 13;
+}
+
+message FieldOptions {
+  optional string type = 1;
+  optional string scala_name = 2;
+  optional string collection_type = 3;
+  repeated string annotations = 4;
+  optional string map_type = 5;
+  optional string key_type = 6;
+  optional string value_type = 7;
+  optional bool no_box = 8;
+  optional bool required = 9;
+}
+
+message EnumOptions {
+  repeated string extends = 1;
+  repeated string companion_extends = 2;
+  optional string type = 3;
+  optional string base_annotations = 4;
+  optional string recognized_annotations = 5;
+  optional string unrecognized_annotations = 6;
+}
+
+message EnumValueOptions {
+  repeated string extends = 1;
+  optional string scala_name = 2;
+  repeated string annotations = 3;
+}
+
+message OneofOptions {
+  repeated string extends = 1;
+  optional string scala_name = 2;
+}
+
+// Extension stubs - these do nothing but satisfy the proto compiler.
+extend google.protobuf.FileOptions {
+  optional ScalaPbOptions options = 1020;
+}
+
+extend google.protobuf.MessageOptions {
+  optional MessageOptions message = 1020;
+}
+
+extend google.protobuf.FieldOptions {
+  optional FieldOptions field = 1020;
+}
+
+extend google.protobuf.EnumOptions {
+  optional EnumOptions enum_options = 1020;
+}
+
+extend google.protobuf.EnumValueOptions {
+  optional EnumValueOptions enum_value = 1020;
+}
+
+extend google.protobuf.OneofOptions {
+  optional OneofOptions oneof = 1020;
+}
