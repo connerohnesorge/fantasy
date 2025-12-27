@@ -67,9 +67,10 @@ type Score struct {
 - GIVEN a scorer that encounters an error
 - WHEN the error is captured
 - THEN Score.Error is set to the error
-- AND Score.Value is set to nil or zero value
+- AND Score.Value is set to nil (not zero value, to distinguish "scorer failed" from "scorer returned 0")
 - AND Score.Rationale may contain error context
 - AND the test case is marked as having an error (not pass or fail)
+- AND the error count is incremented in ScorerStats.ErrorCount
 
 ### Requirement: Dataset Types
 
@@ -171,6 +172,12 @@ func WithTracing(config TracingConfig) RunOption // Enable tracing for test case
 - AND each scorer receives its own goroutine per test case
 - AND errors are collected per test case, not propagated globally
 
+**Ordering Implementation**:
+- Results slice is pre-allocated with length = number of test cases
+- Each worker writes to its assigned index (no mutex needed for writes)
+- Workers receive test case index along with test case data
+- Final results maintain original order regardless of completion order
+
 #### Scenario: Timeout handling
 - GIVEN a scorer that takes too long
 - WHEN evaluation runs with `WithTimeout(5*time.Second)`
@@ -239,7 +246,18 @@ The system SHALL handle errors gracefully during evaluation.
 type PredictFunc func(ctx context.Context, inputs map[string]any) (outputs map[string]any, trace *tracing.Trace, err error)
 ```
 - AND if the predict function returns an error, the test case is marked as errored
-- AND if trace is nil, agent-specific scorers (ToolCallTrajectory, StepValidation) will skip or error
+- AND if trace is nil, agent-specific scorers (ToolCallTrajectory, StepValidation) receive nil in ScorerInput.Trace
+
+**PredictFunc Trace Return Behavior**:
+- Returning `nil` for trace is valid (not an error)
+- Non-trace-aware scorers (ExactMatch, JSONMatch, etc.) ignore the trace field
+- Trace-aware scorers check for nil and return an error Score if trace is required but missing:
+  ```go
+  if input.Trace == nil {
+      return Score{Error: errors.New("ToolCallTrajectory scorer requires a non-nil trace")}
+  }
+  ```
+- The evaluator does NOT automatically fail if PredictFunc returns nil trace; it's up to individual scorers
 
 ### Requirement: Heuristic Scorers
 
@@ -525,21 +543,28 @@ type EvalError struct {
 
 **Pass Rate** (for boolean scores):
 ```
-pass_rate = count(score.Value == true) / count(all_scores)
+pass_rate = count(score.Value == true) / count(non_error_scores)
 ```
 - Only includes test cases where Score.Error is nil
 - Expressed as a float64 between 0.0 and 1.0
+- For boolean scorers, PassRate = Mean (both count true=1, false=0)
 
 **Mean** (for numeric scores):
 ```
-mean = sum(score.Value) / count(all_scores)
+mean = sum(score.Value) / count(non_error_scores)
 ```
-- Only includes test cases where Score.Error is nil and Score.Value is numeric
+- Only includes test cases where Score.Error is nil and Score.Value is not nil
 - Type coercion for aggregation:
   - float64: used directly
   - int/int64: converted to float64
   - bool: true = 1.0, false = 0.0
-  - string: skipped (logged as warning)
+  - string: skipped (logged as warning, not included in count)
+
+**Why Both PassRate and Mean?**
+- PassRate is intuitive for boolean scorers: "80% of tests passed"
+- Mean is useful for numeric scorers: "average score was 0.75"
+- For boolean scorers, both values are identical (both use true=1, false=0)
+- For numeric scorers, PassRate is less meaningful (but can be computed if threshold provided)
 
 **Standard Deviation** (sample std, for numeric scores):
 ```

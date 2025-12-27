@@ -49,15 +49,20 @@
 
 **Context**: Extract and clean MLflow proto definitions. We use v3.8.0 for stability; traces API is relatively new.
 
-- [ ] 2.0 Clone MLflow repository (v3.8.0): `git clone --depth 1 --tag v3.8.0 https://github.com/mlflow/mlflow.git mlflow-ref/mlflow`
+- [ ] 2.0 Clone MLflow repository (v3.8.0): `git clone --depth 1 --branch v3.8.0 https://github.com/mlflow/mlflow.git mlflow-ref/mlflow`
   - Context: Shallow clone saves disk space; v3.8.0 has stable traces API
   - Acceptance: `mlflow-ref/mlflow/protos/` directory exists
 - [ ] 2.1 Copy core protos from `mlflow-ref/mlflow/protos/` to `proto/mlflow/`
   - Context: Start with original protos, then modify for our use case
-  - Acceptance: All .proto files copied maintaining directory structure
+  - Files to copy: `service.proto`, `assessments.proto`, `datasets.proto`, `internal.proto`
+  - Skip: Databricks-specific files (`databricks_*.proto`), Unity Catalog files (`unity_catalog_*.proto`)
+  - Acceptance: Selected .proto files copied with correct directory structure
 - [ ] 2.2 Strip ScalaPB extensions and Databricks-specific options
   - Context: Remove `[(scalapb.field).type = ...]` and Databricks auth options we don't need
-  - Acceptance: `buf lint` doesn't complain about unknown extensions
+  - Method: Use sed/awk or manual edit to remove lines matching `scalapb.` and `databricks_`
+  - Pattern to remove: `[(scalapb.*)]`, `option (scalapb.*) = ...`, imports of `scalapb/scalapb.proto`
+  - Acceptance: `buf lint` passes without unknown extension errors
+  - Acceptance: Proto files compile successfully with `buf build`
 - [ ] 2.3 Create `service.proto` with trace messages (TraceInfoV3, Span, etc.)
   - Context: Consolidate trace-related messages; TraceInfoV3 is the current format
 - [ ] 2.4 Create `assessments.proto` with Assessment, Feedback, Expectation
@@ -102,16 +107,34 @@
   - Acceptance: `LogBatch` supports metrics, params, tags in single call
 - [ ] 3.7 Implement `traces.go`: StartTrace, GetTrace, SearchTraces, DeleteTraces
   - Context: Core tracing API; StartTrace creates trace + root span
-  - Acceptance: Methods map to `/api/2.0/mlflow/traces/*` endpoints
+  - Acceptance: Methods map to `/api/3.0/mlflow/traces/*` endpoints (v3 API)
 - [ ] 3.8 Implement `assessments.go`: Create, Get, Update, Delete
   - Context: Store evaluation results (scorer outputs)
   - Acceptance: Assessment CRUD operations work end-to-end
 - [ ] 3.9 Implement `scorers.go`: Register, List, Get, Delete
   - Context: Custom scorer registration for MLflow UI
   - Acceptance: Scorer metadata persists across server restarts
-- [ ] 3.10 Implement `tags.go`: SetTraceTag, DeleteTraceTag, SetRunTag
+- [ ] 3.10 Implement `tags.go`: SetTraceTag, DeleteTraceTag, SetRunTag, DeleteRunTag
   - Context: Add metadata to traces/runs for filtering and organization
   - Acceptance: Supports string key-value tags
+- [ ] 3.10a Define `SearchExperimentsOptions` struct in `experiments.go`
+  - Context: Options for SearchExperiments (Filter, MaxResults, PageToken, OrderBy, ViewType)
+  - Acceptance: All fields documented with JSON tags and defaults
+- [ ] 3.10b Define `SearchRunsOptions` struct in `runs.go`
+  - Context: Options for SearchRuns (ExperimentIDs, Filter, RunViewType, MaxResults, OrderBy, PageToken)
+  - Acceptance: ExperimentIDs is required; validation returns error if empty
+- [ ] 3.10c Define `SearchTracesOptions` struct in `traces.go`
+  - Context: Options for SearchTraces (ExperimentIDs, Filter, MaxResults, PageToken, OrderBy)
+  - Acceptance: All fields documented; sensible defaults (MaxResults=100)
+- [ ] 3.10d Define `DeleteTracesOptions` struct in `traces.go`
+  - Context: Options for DeleteTraces (MaxTraces, MaxTimestampMs, Filter)
+  - Acceptance: Validation ensures at least one criterion is specified
+- [ ] 3.10e Define `SerializedScorer` struct in `scorers.go`
+  - Context: Scorer registration format (Type, Name, Description, Config)
+  - Acceptance: Config is map[string]any for flexibility
+- [ ] 3.10f Define `Assessment` and related types in `assessments.go`
+  - Context: Assessment, AssessmentSource, FeedbackValue, ExpectationValue, AssessmentError
+  - Acceptance: All types match spec definitions; proper JSON marshaling
 - [ ] 3.11 Implement retry logic with exponential backoff and jitter
   - Context: Production-ready resilience for flaky networks and rate limits
   - Acceptance: 3 retries max, 1s initial delay, 2x backoff, +/-10% jitter, 10s max delay
@@ -137,12 +160,21 @@
   - Context: Core evaluation types and interfaces
   - Acceptance: Package structure: `scorer.go`, `dataset.go`, `evaluator.go`, `results.go`
 - [ ] 4.2 Define `Scorer` interface in `scorer.go`
-  - Context: `Score(ctx, input, output, expected) (*Score, error)` - universal interface
-  - Acceptance: Interface supports both heuristic and LLM scorers
+  - Context: `Score(ctx context.Context, input ScorerInput) (Score, error)` - universal interface
+  - Acceptance: Interface has `Name() string` and `Score()` methods
   - Acceptance: Context enables timeout/cancellation
+- [ ] 4.2a Define `ScorerInput` struct in `scorer.go`
+  - Context: Input container for scorers (Outputs, Expectations, Trace, Inputs)
+  - Acceptance: Trace field is `*tracing.Trace` (nil for scorers that don't need it)
 - [ ] 4.3 Define `Score` result type with value, rationale, metadata
-  - Context: Normalized 0-1 score, optional explanation, custom metadata map
-  - Acceptance: Fields: `Value float64`, `Rationale string`, `Metadata map[string]any`
+  - Context: Score value can be bool, float64, int, or string
+  - Acceptance: Fields: `Value any`, `Rationale string`, `Metadata map[string]any`, `Error error`
+- [ ] 4.3a Define `PredictFunc` type in `evaluator.go`
+  - Context: Function signature for generating outputs from inputs
+  - Acceptance: `func(ctx, inputs map[string]any) (outputs map[string]any, trace *tracing.Trace, err error)`
+- [ ] 4.3b Define `RunOption` functions in `evaluator.go`
+  - Context: Functional options for Run(): WithParallelism, WithTimeout, WithPredict, WithTracing
+  - Acceptance: Each option function documented with its effect
 - [ ] 4.4 Define `Dataset` and `TestCase` types in `dataset.go`
   - Context: Dataset = []TestCase; TestCase = {Input, Expected, Metadata}
   - Acceptance: Supports arbitrary JSON for input/expected (flexible schema)
@@ -168,6 +200,18 @@
   - Context: Aggregate scores across dataset (mean, median, pass rate, etc.)
   - Acceptance: `Results` type has `Summary()` method returning stats
   - Acceptance: Per-scorer and overall statistics available
+- [ ] 4.10a Define `Results` struct in `results.go`
+  - Context: Complete evaluation output (TestCases, Summary, Errors, StartTime, EndTime, TotalTests)
+  - Acceptance: All fields match spec; JSON serialization works correctly
+- [ ] 4.10b Define `TestCaseResult` struct in `results.go`
+  - Context: Per-test-case results (TestCase, Outputs, Scores, Trace)
+  - Acceptance: Scores is `map[string]Score` keyed by scorer name
+- [ ] 4.10c Define `ScorerStats` struct in `results.go`
+  - Context: Aggregated stats per scorer (PassRate, Mean, StdDev, ErrorRate, ErrorCount, Count)
+  - Acceptance: Formulas match spec (sample std dev with n-1)
+- [ ] 4.10d Define `EvalError` struct in `results.go`
+  - Context: Evaluation-level error with Phase, Message, Cause
+  - Acceptance: Phase is one of: "setup", "predict", "score", "export"
 
 ## 5. Built-in Heuristic Scorers
 
@@ -188,8 +232,10 @@
   - Acceptance: Compiles regex once at construction; returns 1.0 on match
 - [ ] 5.5 Implement `JSONMatch` scorer (structural comparison)
   - Context: Deep equality for JSON outputs; essential for API testing
-  - Acceptance: Implement JSONMatchOptions: IgnoreOrder, IgnoreNulls, IgnoreExtraKeys
   - Acceptance: Handles nested objects and arrays correctly
+- [ ] 5.5a Define `JSONMatchOptions` struct
+  - Context: Configuration for JSONMatch (NullEqualsMissing, IgnoreArrayOrder, FloatTolerance)
+  - Acceptance: Default: NullEqualsMissing=false, IgnoreArrayOrder=false, FloatTolerance=0
 - [ ] 5.6 Implement `NumericRange` scorer (value in range)
   - Context: `NewNumericRange(min, max)` - for metrics, percentages, counts
   - Acceptance: Extracts number from output, checks bounds, scores 1.0 if in range
@@ -197,12 +243,17 @@
   - Context: Validates agent used tools in expected order (e.g., "must call search before summarize")
   - **Depends on 8.x**: Requires `*tracing.Trace` type from tracing package
   - Acceptance: Compares actual tool call sequence to expected sequence
-  - Acceptance: Options: exact order vs. contains subsequence
+  - Acceptance: Expected sequence from `expectations["tool_sequence"]` as []string
+- [ ] 5.7a Define `ToolCallTrajectoryOptions` struct
+  - Context: Configuration for ToolCallTrajectory (Strict, IgnoreOrder)
+  - Acceptance: Strict=false (extra tools allowed), IgnoreOrder=false (order matters)
 - [ ] 5.8 Implement `StepValidation` scorer (step count and content validation)
   - Context: Checks agent took expected number of steps, each with valid actions
   - **Depends on 8.x**: Requires `*tracing.Trace` type from tracing package
   - Acceptance: Validates step count range (min/max)
-  - Acceptance: Optional per-step validators for step content
+- [ ] 5.8a Define `StepValidationOptions` struct
+  - Context: Configuration for StepValidation (MinSteps, MaxSteps, ContentPatterns)
+  - Acceptance: ContentPatterns is map[int]string for per-step regex validation
 - [ ] 5.9 Add unit tests for all heuristic scorers
   - Context: Fast, deterministic tests; no MLflow dependency
   - Acceptance: Test edge cases: empty strings, malformed JSON, regex errors
@@ -286,20 +337,44 @@
 ## 8. Tracing Integration
 
 **Context**: Capture agent execution traces and send to MLflow for observability. Critical for debugging and evaluation.
-**Design**: Fantasy callbacks → span events → MLflow TraceInfoV3; wrapper intercepts agent calls.
+**Design**: Fantasy callbacks → span events → MLflow TraceInfoV3; TracingCallbacks implements Fantasy's Callbacks interface.
 **Priority**: Enables agent-specific scorers (5.7-5.8) and production monitoring.
 **Depends on**: 2.x (proto types), 3.x (MLflow client)
 
-- [ ] 8.1 Create `tracing/` package scaffold with config.go, tracer.go, callbacks.go
+- [ ] 8.1 Create `tracing/` package scaffold with config.go, tracer.go, callbacks.go, types.go
   - Context: Separate package for tracing logic; fantasy package imports this
-  - Acceptance: Package structure: config (types), tracer (core logic), callbacks (Fantasy integration)
+  - Acceptance: Package structure: config (TracingConfig), tracer (Tracer), callbacks (TracingCallbacks), types (Trace, Span)
+- [ ] 8.1a Define `Trace` struct in `types.go`
+  - Context: In-memory trace with TraceID, ExperimentID, RequestTime, Spans, State, etc.
+  - Acceptance: Fields match spec; sync.RWMutex for concurrent access
+- [ ] 8.1b Define `Span` struct in `types.go`
+  - Context: Span with SpanID, ParentID, Name, SpanType, StartTimeNs, EndTimeNs, Attributes
+  - Acceptance: Fields match spec; sync.Mutex for concurrent access
+- [ ] 8.1c Define `SpanEvent` struct in `types.go`
+  - Context: Event with Name, Timestamp, Attributes (for streaming chunks, errors)
+  - Acceptance: Timestamp is int64 nanoseconds since epoch
+- [ ] 8.1d Define `SpanStatus` and `SpanStatusCode` types in `types.go`
+  - Context: Status codes: UNSET, OK, ERROR with description
+  - Acceptance: Constants SpanStatusUnset, SpanStatusOK, SpanStatusError
+- [ ] 8.1e Define `TraceState` type in `types.go`
+  - Context: Trace states: IN_PROGRESS, OK, ERROR
+  - Acceptance: Constants TraceStateInProgress, TraceStateOK, TraceStateError
+- [ ] 8.1f Define `TracingResult` struct in `types.go`
+  - Context: Result of traced execution (Trace, FlushError)
+  - Acceptance: Trace is the completed trace; FlushError is nil on success
+- [ ] 8.1g Define `TokenUsage` struct in `types.go`
+  - Context: Token counts (InputTokens, OutputTokens, TotalTokens)
+  - Acceptance: JSON tags match MLflow attribute format
 - [ ] 8.2 Implement `Tracer` type with span creation methods (crypto/rand for IDs)
-  - Context: Core tracing state machine; manages span hierarchy and IDs
+  - Context: Factory that creates Traces and generates IDs
   - Acceptance: Trace IDs use `tr-` prefix with 32 hex chars (crypto/rand for security)
   - Acceptance: Span IDs are 16 hex chars (crypto/rand)
-  - Acceptance: Methods: `StartTrace()`, `EndTrace()`, `StartSpan(name, parent)`, `EndSpan(id)`
-  - Acceptance: Thread-safe (sync.Mutex protects span map)
-- [ ] 8.3 Implement span hierarchy: Agent → Step → (LLM, Tool)
+  - Acceptance: Methods: `NewTrace()`, `StartSpan(trace, name, parent)`, `EndSpan(span)`
+  - Acceptance: Thread-safe (sync.Mutex protects internal state)
+- [ ] 8.2a Define `SpanType` constants in `types.go`
+  - Context: AGENT, LLM, TOOL, CHAIN, RETRIEVER, EMBEDDING, UNKNOWN
+  - Acceptance: Type is string for JSON serialization compatibility
+- [ ] 8.3 Implement span hierarchy: Agent → Step → [LLM | Tool]
   - Context: MLflow span model; Agent is root, Steps are children, LLM/Tool are grandchildren
   - Note: LLM and Tool spans are **siblings** (both children of Step span, not Tool child of LLM)
   - Note: LLM spans are **inferred retroactively** from step timing (Fantasy doesn't expose LLM hooks)
@@ -313,10 +388,10 @@
   - Context: Configuration for tracing behavior; passed to `fantasy.WithTracing()`
   - Acceptance: Fields match spec (Client, ExperimentID, AgentName, ModelName, SessionID, Tags, FlushTimeout)
   - Acceptance: Defaults: AgentName="agent", SessionID=UUID v4, FlushTimeout=10s
-- [ ] 8.6 Implement tracing wrapper that intercepts Run/Stream calls
-  - Context: Wraps agent's Run/Stream methods to inject tracing
-  - Acceptance: `wrapAgentWithTracing(agent, config)` returns wrapped agent
-  - Acceptance: Wrapper is transparent (same interface as original agent)
+- [ ] 8.6 Implement `TracingCallbacks` that implements Fantasy's Callbacks interface
+  - Context: Callback handler that creates/manages spans in response to agent events
+  - Acceptance: Implements OnAgentStart, OnAgentFinish, OnStepStart, OnStepFinish, OnToolCall, OnToolResult
+  - Acceptance: Creates trace on OnAgentStart, flushes on OnAgentFinish
 - [ ] 8.7 Create `fantasy.WithTracing(config)` agent option in fantasy package (agent.go)
   - Context: Fantasy package API for enabling tracing
   - Note: `WithTracing` lives in **fantasy package** for API consistency
@@ -332,9 +407,9 @@
   - Acceptance: OnToolCall creates tool span with tool name and input
   - Acceptance: OnToolResult ends tool span with output/error
   - Acceptance: Match spans by tool call ID (enables concurrent tool calls)
-- [ ] 8.10 Implement automatic trace flush on wrapper completion (blocking with timeout)
-  - Context: Ensure traces reach MLflow before agent call returns
-  - Acceptance: Flush happens **after** Run/Stream completes, **before** returning to caller
+- [ ] 8.10 Implement automatic trace flush on OnAgentFinish (blocking with timeout)
+  - Context: Ensure traces reach MLflow when agent completes
+  - Acceptance: Flush happens in OnAgentFinish callback before returning
   - Acceptance: FlushTimeout (default 10s) prevents indefinite blocking
   - Acceptance: Flush errors captured in TracingResult, don't fail agent call
 - [ ] 8.11 Implement thread safety
@@ -353,9 +428,9 @@
   - Context: Prevent memory leaks from spans never ended (bugs, panics)
   - Acceptance: Background goroutine closes spans open >5 minutes
   - Acceptance: Orphan spans marked with INTERNAL_ERROR status
-- [ ] 8.15 Implement panic recovery in trace wrapper
+- [ ] 8.15 Implement panic recovery in TracingCallbacks
   - Context: Ensure traces flushed even if agent panics
-  - Acceptance: defer/recover in wrapper ends all open spans with ERROR
+  - Acceptance: defer/recover in callbacks ends all open spans with ERROR
   - Acceptance: Flush called before re-panicking
   - Acceptance: Original panic preserved (re-throw after flush)
 - [ ] 8.16 Implement `FlushAll(ctx)` for flushing all pending traces

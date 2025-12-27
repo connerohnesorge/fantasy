@@ -6,10 +6,11 @@ The system SHALL generate unique identifiers for traces and spans following Open
 
 #### Scenario: Trace ID generation
 - GIVEN a new trace is being created
-- WHEN `tracer.StartTrace(ctx)` is called
+- WHEN `tracer.NewTrace()` is called
 - THEN a 16-byte (128-bit) trace ID is generated using crypto/rand
 - AND the trace ID is formatted as 32 lowercase hexadecimal characters
-- AND the MLflow trace request ID format is `tr-<hex_trace_id>` (e.g., "tr-1234567890abcdef...")
+- AND the MLflow trace request ID format is `tr-<32_hex_chars>` (e.g., "tr-1234567890abcdef1234567890abcdef")
+- AND the total trace ID length is 35 characters (3 for "tr-" + 32 hex chars)
 
 #### Scenario: Span ID generation
 - GIVEN a new span is being created
@@ -199,10 +200,13 @@ The system SHALL provide a Tracer for creating MLflow-compatible traces and span
 
 #### Scenario: Trace initialization
 - GIVEN a Tracer instance
-- WHEN `tracer.StartTrace(ctx)` is called
-- THEN a new trace is created with a unique ID
-- AND request time is set to current timestamp
+- WHEN `tracer.NewTrace(ctx, config TracingConfig)` is called
+- THEN a new Trace struct is created with a unique ID
+- AND the context is updated to contain the trace (for SpanFromContext)
+- AND request time is set to current timestamp in milliseconds
 - AND state is set to IN_PROGRESS
+- AND the function returns `(ctx context.Context, trace *Trace, err error)`
+- AND the returned context should be used for all subsequent operations in this trace
 
 #### Scenario: Trace completion
 - GIVEN an active trace
@@ -281,11 +285,11 @@ direct LLM call/result hooks. This approximation captures the primary LLM intera
 per step but may not reflect retry attempts or multi-model scenarios.
 
 #### Scenario: Agent span
-- GIVEN an agent execution starts via the tracing wrapper
+- GIVEN an agent execution starts (OnAgentStart fires)
 - WHEN the root span is created
 - THEN span type is set to AGENT
-- AND span name is set to "agent" (or custom name from TracingConfig.AgentName)
-- AND span becomes parent for all child spans
+- AND span name is set to TracingConfig.AgentName (default: "agent")
+- AND span becomes parent for all child spans (Steps)
 
 #### Scenario: Step span
 - GIVEN an agent step executes
@@ -299,12 +303,16 @@ per step but may not reflect retry attempts or multi-model scenarios.
 - WHEN the step completes (OnStepFinish fires)
 - THEN an LLM span is created retroactively as child of step span
 - AND span type is set to LLM
-- AND span name includes the model name from TracingConfig.ModelName
+- AND span name is formatted as `llm-<model_name>` (e.g., "llm-gpt-4")
 - AND LLM span timing is calculated as:
-  - `start_time_ns` = step start time
-  - `end_time_ns` = first tool call start time (if tools called) OR step end time (if no tools)
-- AND in multi-tool scenarios, only ONE LLM span is inferred per step
-- AND token usage from the step response is attached to the LLM span
+  - `start_time_ns` = step start time (from OnStepStart)
+  - `end_time_ns` = first tool call start time (if any tools called) OR step end time (if no tools)
+- AND in multi-tool scenarios (multiple concurrent or sequential tool calls):
+  - Only ONE LLM span is inferred per step
+  - The LLM span covers the time from step start to the EARLIEST tool call start time
+  - This represents the initial LLM response generation before any tool execution
+- AND token usage from the step response's Usage field is attached to the LLM span
+- AND if no Usage field is available (provider-dependent), token usage attributes are omitted
 
 #### Scenario: Tool span
 - GIVEN a tool is executed during a step
@@ -351,19 +359,19 @@ type TokenUsage struct {
 
 ### Requirement: Agent Callback Integration
 
-The system SHALL integrate with Fantasy's existing agent callbacks via a tracing wrapper.
+The system SHALL integrate with Fantasy's existing agent callbacks via TracingCallbacks.
 
-The **tracing wrapper** is a callback implementation that:
-1. Implements Fantasy's `Callbacks` interface (`OnStepStart`, `OnStepFinish`, `OnToolCall`, `OnToolResult`)
+**TracingCallbacks** is a callback implementation that:
+1. Implements Fantasy's `Callbacks` interface (`OnAgentStart`, `OnAgentFinish`, `OnStepStart`, `OnStepFinish`, `OnToolCall`, `OnToolResult`)
 2. Creates and manages MLflow spans in response to agent events
-3. Is instantiated via `fantasy.WithTracing(config)` agent option
+3. Is registered via `fantasy.WithTracing(config)` agent option
 4. Maintains internal state mapping callback events to their corresponding spans
 
 #### Scenario: WithTracing option
 - GIVEN an agent configuration
 - WHEN `fantasy.WithTracing(config)` option is applied
-- THEN tracing is enabled via a call wrapper pattern
-- AND the wrapper intercepts Run/Stream calls to capture context
+- THEN a TracingCallbacks instance is created and registered with the agent
+- AND the callbacks fire during agent execution to create/manage spans
 - AND no changes to Fantasy's core API are required
 
 #### Scenario: TracingConfig structure
@@ -375,12 +383,12 @@ The **tracing wrapper** is a callback implementation that:
 - AND SessionID defaults to a new UUID v4 if not provided
 - AND FlushTimeout controls how long to wait when sending trace data to MLflow server
 
-#### Scenario: Tracing wrapper initialization
+#### Scenario: TracingCallbacks initialization (OnAgentStart)
 - GIVEN tracing is enabled via WithTracing(config)
 - WHEN agent.Run() or agent.Stream() is called
-- THEN the wrapper intercepts the call before delegating to the agent
+- THEN OnAgentStart callback fires before agent execution begins
 - AND creates a new trace with context from TracingConfig
-- AND captures the initial prompt from the call parameters
+- AND captures the initial prompt from the agent input
 - AND creates the root agent span
 
 #### Scenario: OnStepStart callback
@@ -409,12 +417,12 @@ The **tracing wrapper** is a callback implementation that:
 - THEN tool span is ended
 - AND tool result is captured in outputs
 
-#### Scenario: Tracing wrapper completion
+#### Scenario: TracingCallbacks completion (OnAgentFinish)
 - GIVEN tracing is enabled and agent completes
-- WHEN the wrapped Run/Stream call returns
-- THEN the wrapper captures the AgentResult
+- WHEN OnAgentFinish callback fires
+- THEN the callback captures the AgentResult
 - AND agent span is ended with appropriate status
-- AND trace is finalized and sent to MLflow
+- AND trace is finalized and sent to MLflow (blocking with FlushTimeout)
 
 ### Requirement: Content Capture
 

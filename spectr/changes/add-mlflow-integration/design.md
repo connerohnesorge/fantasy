@@ -27,6 +27,33 @@ This section clarifies terminology used across specifications:
 | **Trace ID** | tracing | Full trace identifier with `tr-` prefix (e.g., `tr-abc123...`) |
 | **Request ID** | tracing | Deprecated alias for Trace ID (used in MLflow v2 API) |
 
+### Type Hierarchy Clarification
+
+The tracing system uses distinct types for construction vs. transport:
+
+| Type | Package | Purpose |
+|------|---------|---------|
+| `Trace` | tracing | In-memory trace builder; holds spans, state, metadata during execution |
+| `Span` | tracing | In-memory span data; attached to a Trace |
+| `Tracer` | tracing | Factory/manager that creates Traces; not a data type |
+| `TracingCallbacks` | tracing | Callback handler that manages trace lifecycle |
+| `mlflowclient.Trace` | mlflowclient | Wire format wrapper around proto type for API transport |
+
+**Data Flow**:
+```
+TracingCallbacks creates → tracing.Trace (with Spans)
+                            ↓ ConvertTrace()
+                        mlflowclient.Trace
+                            ↓ client.StartTrace()
+                        HTTP/JSON to MLflow server
+```
+
+**Key Points**:
+- Users interact with `TracingConfig` to enable tracing
+- `Trace` and `Span` are internal data structures managed by `TracingCallbacks`
+- `Tracer` is a helper that generates IDs and creates empty Trace instances
+- Conversion to `mlflowclient.Trace` happens automatically during flush
+
 ## Goals / Non-Goals
 
 ### Goals
@@ -135,22 +162,48 @@ eval/
 **What**: Integrate tracing via Fantasy's existing callback system.
 
 **Why**:
-- Non-invasive integration
+- Non-invasive integration using existing Fantasy callback infrastructure
 - Users opt-in with `WithTracing(config)`
-- Callbacks already exist for step/tool events
-- No changes to core agent logic
+- Callbacks already exist for step/tool events (OnStepStart, OnStepFinish, OnToolCall, OnToolResult)
+- No changes to core agent logic or Run/Stream method signatures
 
-**Span Hierarchy**: `Agent -> Step -> (LLM, Tool)`
+**Implementation**: Tracing is implemented entirely via Fantasy's callback system:
+1. `WithTracing(config)` registers a `TracingCallbacks` implementation with the agent
+2. `TracingCallbacks` implements Fantasy's `Callbacks` interface
+3. Each callback method creates/updates spans and manages trace state
+4. No wrapper intercepts Run/Stream calls; the agent runs normally with callbacks registered
+
+**Span Hierarchy**: `Agent → Step → [LLM | Tool]`
 
 LLM and Tool spans are siblings—both are children of the Step span. When a step executes,
 it may involve an LLM call followed by zero or more tool calls, all at the same hierarchical level.
 
 **Note on LLM Span Inference**: Fantasy's callback system provides OnStepStart/OnStepFinish and
 OnToolCall/OnToolResult, but does not expose direct LLM call hooks. LLM spans are therefore
-**inferred retroactively** from step timing: the LLM span covers the time between step start
-and the first tool call (or step end if no tools). This is an approximation but provides
-useful visibility into LLM execution time. Token usage is captured from the step's response
-metadata when available.
+**inferred retroactively** when OnStepFinish fires:
+- LLM span start time = step start time (from OnStepStart)
+- LLM span end time = first tool call start time (if tools were called) OR step end time (if no tools)
+- This approximation provides useful visibility into LLM execution time
+
+Token usage is extracted from the step response's `Usage` field when available (provider-dependent).
+
+**Callback Flow**:
+```
+Agent.Run() starts
+  → OnAgentStart callback → creates Agent span (root)
+    → OnStepStart callback → creates Step span (child of Agent)
+      → [Optional] OnToolCall callback → creates Tool span (child of Step)
+      → [Optional] OnToolResult callback → ends Tool span
+    → OnStepFinish callback → creates inferred LLM span, ends Step span
+  → OnAgentFinish callback → ends Agent span, flushes trace to MLflow
+Agent.Run() returns
+```
+
+**SessionID Generation**:
+- If `SessionID` is empty in `TracingConfig`, a new UUID v4 is generated once per agent instance
+- The UUID is generated during `NewAgent()` when processing the `WithTracing()` option
+- All traces from that agent instance share the same SessionID (useful for multi-turn conversations)
+- To use different SessionIDs per call, create new agent instances or explicitly set SessionID
 
 **Pattern**:
 ```go
@@ -166,10 +219,11 @@ agent := fantasy.NewAgent(model,
 )
 ```
 
-Note: `fantasy.WithTracing()` is in the fantasy package for consistency with other agent options
-(e.g., `fantasy.WithTools()`, `fantasy.WithSystemPrompt()`). The TracingConfig struct is defined in
-the tracing/ package but the WithTracing() function is exported from fantasy/ to maintain API ergonomics.
-The tracing wrapper intercepts Run/Stream calls to capture context before delegating to the agent.
+**Package Structure Note**: `fantasy.WithTracing()` is in the fantasy package for consistency with
+other agent options (e.g., `fantasy.WithTools()`, `fantasy.WithSystemPrompt()`). The `TracingConfig`
+struct and `TracingCallbacks` implementation are defined in the `tracing/` package. This avoids
+circular dependencies: `fantasy` imports `tracing` for the config type, but `tracing` does not
+import `fantasy`.
 
 ### Decision 5: Configurable Parallelism for Evaluation
 
@@ -197,7 +251,7 @@ results := evaluator.Run(ctx, dataset, scorers,
 - **Proto Update Workflow**:
   1. Clone the MLflow repository at the desired version:
      ```bash
-     git clone --depth 1 --tag v3.8.0 https://github.com/mlflow/mlflow.git mlflow-ref/mlflow
+     git clone --depth 1 --branch v3.8.0 https://github.com/mlflow/mlflow.git mlflow-ref/mlflow
      ```
   2. Copy and curate protos from `mlflow-ref/mlflow/protos/` to `proto/mlflow/`
   3. Strip ScalaPB extensions and regenerate Go code
@@ -218,6 +272,30 @@ results := evaluator.Run(ctx, dataset, scorers,
 ### Constraint: Span Attribute Size Limits
 - **Constraint**: MLflow limits span inputs/outputs to 10,240 bytes
 - **Decision**: Truncate span attributes that exceed limit with suffix "..."
+
+### Constraint: Timestamp Precision
+- **Span timestamps**: Use nanoseconds (`time.Now().UnixNano()`) for `StartTimeNs`, `EndTimeNs`
+- **Trace timestamps**: Use milliseconds for `RequestTime` (MLflow API requirement)
+- **Duration**: Calculated in the appropriate unit for each type
+- **Conversion**: `milliseconds = nanoseconds / 1_000_000`
+
+### Edge Case: Concurrent Agent Calls
+- **Scenario**: Multiple goroutines call agent.Run() simultaneously
+- **Handling**: Each call gets an independent trace via context-local storage
+- **Key**: Trace state is stored in `context.Context`, not global variables
+- **Risk**: Memory usage scales with concurrent executions; no automatic limits
+
+### Edge Case: Streaming Responses
+- **Scenario**: Agent uses Stream() instead of Run()
+- **Handling**: Span outputs capture final accumulated content, not individual chunks
+- **Timing**: LLM span ends when streaming completes (not when first token arrives)
+- **Token usage**: May not be available until stream completes (provider-dependent)
+
+### Edge Case: Panic During Execution
+- **Scenario**: Agent code panics during execution
+- **Handling**: defer/recover in callbacks captures panic, ends all open spans with ERROR
+- **Trace state**: Set to ERROR with panic message in status description
+- **Re-throw**: Panic is re-raised after trace flush to preserve expected behavior
 
 ## Migration Plan
 
@@ -290,7 +368,131 @@ fantasy/
 ├── tracing/                        # Tracing integration
 │   ├── tracer.go                   # Trace/span builder
 │   ├── callbacks.go                # Agent callback integration
+│   ├── types.go                    # Trace, Span, TokenUsage structs
 │   └── config.go                   # TracingConfig struct
 │
 └── agent.go                        # WithTracing() option (fantasy package)
 ```
+
+## Cross-Document Consistency
+
+This section documents decisions that ensure consistency across all spec files.
+
+### Trace Type Field Mapping
+
+| `tracing.Trace` Field | `mlflowclient.Trace` Field | Proto Field | Notes |
+|----------------------|---------------------------|-------------|-------|
+| TraceID | TraceID | request_id | Format: `tr-<32hex>` |
+| ExperimentID | ExperimentID | experiment_id | String |
+| RequestTime | RequestTime | timestamp_ms | Milliseconds |
+| State | State | state | IN_PROGRESS, OK, ERROR |
+| Spans | Spans | spans | Array of Span |
+| Tags | Tags | tags | map[string]string |
+| (internal mutex) | - | - | Not serialized |
+
+### Span Type Field Mapping
+
+| `tracing.Span` Field | Proto Span Field | Unit | Notes |
+|---------------------|-----------------|------|-------|
+| SpanID | span_id | - | 16 hex chars |
+| ParentID | parent_id | - | Empty for root |
+| Name | name | - | String |
+| SpanType | span_type | - | AGENT, LLM, TOOL, etc. |
+| StartTimeNs | start_time_ns | nanoseconds | int64 |
+| EndTimeNs | end_time_ns | nanoseconds | int64 |
+| Attributes | attributes | - | JSON-serialized map |
+| Status | status | - | SpanStatus struct |
+| Events | events | - | Array of SpanEvent |
+
+### Error Type Hierarchy
+
+All packages use a consistent error handling strategy:
+
+| Package | Error Types | When Used |
+|---------|------------|-----------|
+| mlflowclient | APIError, ValidationError, TimeoutError, ConnectionError | HTTP/network operations |
+| tracing | (wraps mlflowclient errors) | Flush failures |
+| eval | EvalError | Evaluation-level errors |
+
+**Error Wrapping Pattern**:
+- All errors implement `error` interface
+- All errors with `Cause` implement `Unwrap()` for `errors.Is/As`
+- Higher-level packages wrap lower-level errors (eval wraps tracing wraps mlflowclient)
+
+### Timestamp Units
+
+| Context | Unit | Type | Example |
+|---------|------|------|---------|
+| Span.StartTimeNs | nanoseconds | int64 | `time.Now().UnixNano()` |
+| Span.EndTimeNs | nanoseconds | int64 | `time.Now().UnixNano()` |
+| Trace.RequestTime | milliseconds | int64 | `time.Now().UnixMilli()` |
+| SpanEvent.Timestamp | nanoseconds | int64 | `time.Now().UnixNano()` |
+| API response times | milliseconds | int64 | From server |
+
+**Conversion**: `milliseconds = nanoseconds / 1_000_000`
+
+### Token Usage Extraction
+
+Token usage is extracted from Fantasy's step response:
+
+```go
+// Token usage is provider-dependent. Common structure:
+type Usage struct {
+    InputTokens  int `json:"input_tokens"`
+    OutputTokens int `json:"output_tokens"`
+    TotalTokens  int `json:"total_tokens,omitempty"`
+}
+
+// Extraction in OnStepFinish:
+if stepResult.Response != nil && stepResult.Response.Usage != nil {
+    usage := stepResult.Response.Usage
+    span.SetAttribute("mlflow.tokenUsage", map[string]int{
+        "input_tokens":  usage.InputTokens,
+        "output_tokens": usage.OutputTokens,
+        "total_tokens":  usage.TotalTokens,
+    })
+}
+```
+
+If `Usage` is not available (provider doesn't return it), the attribute is omitted (not set to zero).
+
+### Assessment Source Types
+
+| Source Type | When Used | Example SourceID |
+|-------------|-----------|------------------|
+| CODE | Heuristic scorers (ExactMatch, JSONMatch) | "ExactMatch" |
+| LLM_JUDGE | LLM-as-judge scorers | "Correctness" |
+| HUMAN | Not generated by this library | (for UI/manual feedback) |
+
+The eval framework only generates CODE and LLM_JUDGE assessments. HUMAN is reserved for
+assessments created through MLflow UI or other tools.
+
+### Span Types Usage
+
+| Span Type | When Created | Parent |
+|-----------|-------------|--------|
+| AGENT | OnAgentStart | None (root) |
+| CHAIN | OnStepStart | AGENT |
+| LLM | OnStepFinish (inferred) | CHAIN |
+| TOOL | OnToolCall | CHAIN |
+| RETRIEVER | Reserved for future RAG support | - |
+| EMBEDDING | Reserved for future embedding support | - |
+| UNKNOWN | Fallback for unrecognized types | - |
+
+RETRIEVER and EMBEDDING are defined for forward compatibility but not currently
+created by the Fantasy integration.
+
+### Terminology Consistency
+
+These terms are used consistently across all documents:
+
+| Term | Meaning | NOT |
+|------|---------|-----|
+| Trace | Complete execution record | (not "request") |
+| Span | Single operation within trace | (not "event") |
+| State | Trace-level: IN_PROGRESS, OK, ERROR | Status |
+| Status | Span-level: UNSET, OK, ERROR | State |
+| Score | eval package result | Assessment |
+| Assessment | mlflowclient API entity | Score |
+| Flush | Send trace to MLflow | Export |
+| Export | Send eval results to MLflow | Flush |

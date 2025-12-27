@@ -2,11 +2,21 @@
 
 ### API Version Strategy
 
-The client uses two API versions:
-- `/api/2.0/mlflow/` - Legacy endpoints for experiments, runs, and metrics (stable)
-- `/api/3.0/mlflow/` - Modern endpoints for traces, assessments, and scorers (v3.8+)
+The client uses two API versions (version selection is automatic based on the operation):
 
-Both versions use the same authentication and base URL. Version selection is automatic based on the operation.
+| API Version | Endpoints | Purpose | Introduced |
+|-------------|-----------|---------|------------|
+| `/api/2.0/mlflow/` | experiments/*, runs/* | Experiment and run management | MLflow 1.x |
+| `/api/3.0/mlflow/` | traces/*, assessments/*, scorers/* | GenAI tracing and evaluation | MLflow 3.8.0 |
+
+**Version Selection Rules**:
+- Experiments: Always v2.0 (`/api/2.0/mlflow/experiments/*`)
+- Runs: Always v2.0 (`/api/2.0/mlflow/runs/*`)
+- Traces: Always v3.0 (`/api/3.0/mlflow/traces/*`)
+- Assessments: Always v3.0 (via traces endpoint)
+- Scorers: Always v3.0 (`/api/3.0/mlflow/scorers/*`)
+
+Both versions use the same authentication (Bearer token) and base URL. There is no `/api/1.0/` path in use.
 
 ### Authentication
 
@@ -346,29 +356,54 @@ The system SHALL support MLflow trace API v3 operations.
 - GIVEN the mlflowclient package needs to send traces to MLflow
 - WHEN the client API trace types are defined
 - THEN `mlflowclient.Trace` wraps the generated `proto/gen/mlflow.TraceInfoV3` proto type for API transport
-- AND conversion functions exist to convert `*tracing.Trace` to `*mlflowclient.Trace`:
+
+**Type Distinction**:
+| Type | Package | Purpose | Contents |
+|------|---------|---------|----------|
+| `tracing.Trace` | tracing | In-memory trace construction | Spans, state, sync primitives |
+| `mlflowclient.Trace` | mlflowclient | API wire format | Proto-compatible fields only |
+
+**Conversion**:
 ```go
 // ConvertTrace converts a tracing.Trace to the API wire format.
 // This is used when sending traces to the MLflow server.
+// The conversion:
+// - Extracts TraceID, ExperimentID, RequestTime from tracing.Trace
+// - Converts all Span objects to proto format
+// - Serializes Attributes maps to JSON
+// - Omits sync primitives (mutexes) and internal state
 func ConvertTrace(t *tracing.Trace) *Trace
 ```
-- Note: The `tracing.Trace` type (defined in tracing/spec.md) is used for trace construction,
-  while `mlflowclient.Trace` is used for API transport. They serve different purposes.
+
+Note: This is a one-way conversion. `mlflowclient.Trace` cannot be converted back to `tracing.Trace`
+because it lacks the sync primitives and internal state needed for active trace manipulation.
 
 #### Scenario: Start trace
-- GIVEN a Trace with experiment location
+- GIVEN a complete Trace (with all spans already ended)
 - WHEN `client.StartTrace(ctx, trace *Trace)` is called
 - THEN a POST request is made to `/api/3.0/mlflow/traces`
-- AND the trace is created with the provided spans
+- AND the trace is created with ALL provided spans atomically
+- AND returns the trace ID as confirmation
+
+**StartTrace Semantics**:
+- Despite the name "Start", this operation uploads a COMPLETE trace to MLflow
+- The trace must have all spans already populated (tracing.Trace → mlflowclient.Trace conversion happens before this call)
+- MLflow stores the trace immutably; no spans can be added after StartTrace
+- Use this when the traced execution is complete and you have all span data
 
 #### Scenario: Get trace
 - GIVEN a trace ID
 - WHEN `client.GetTrace(ctx, traceID, allowPartial)` is called
 - THEN a GET request is made to `/api/3.0/mlflow/traces/get`
 - AND the full trace with spans is returned
-- AND `allowPartial` (bool) determines behavior for incomplete traces:
-  - If true: return partial trace data if trace is still in progress
-  - If false: return error if trace is incomplete
+
+**allowPartial Parameter**:
+- `allowPartial = false` (default): Returns error if trace state is IN_PROGRESS
+- `allowPartial = true`: Returns whatever data is available even for IN_PROGRESS traces
+
+Note: Since our client uploads complete traces via StartTrace, you will typically only see
+IN_PROGRESS traces if there was a failure during upload or if reading traces uploaded by
+other clients that use incremental span addition.
 
 #### Scenario: Search traces
 - GIVEN locations, filter, and pagination options
@@ -395,6 +430,13 @@ type SearchTracesOptions struct {
 - WHEN `client.DeleteTraces(ctx, experimentID, opts)` is called
 - THEN a POST request is made to `/api/3.0/mlflow/traces/delete-traces`
 - AND the count of deleted traces is returned
+
+**Return Value Semantics**:
+- Returns `(deletedCount int, err error)`
+- `deletedCount` is the number of traces actually deleted
+- If filter matches 100 traces but MaxTraces=50, deletedCount=50 (partial deletion)
+- If no traces match the criteria, deletedCount=0 (not an error)
+- If server fails mid-deletion, returns error with partial deletedCount if available
 
 #### Scenario: DeleteTracesOptions structure
 - GIVEN the mlflowclient package
