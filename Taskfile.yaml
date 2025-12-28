@@ -41,3 +41,50 @@ tasks:
       - git tag --annotate --sign -m "{{.NEXT}}" {{.NEXT}} {{.CLI_ARGS}}
       - echo "Pushing {{.NEXT}}..."
       - git push origin main --follow-tags
+
+  mlflow:start:
+    desc: Start MLflow server with PostgreSQL backend
+    preconditions:
+      - sh: command -v docker
+        msg: Docker is not installed. Please install Docker to use MLflow server.
+      - sh: docker info > /dev/null 2>&1
+        msg: Docker daemon is not running. Please start Docker.
+    cmds:
+      - docker compose up -d
+      - echo "MLflow server starting at http://localhost:5000"
+      - echo "Use 'task mlflow:logs' to view server logs"
+
+  mlflow:stop:
+    desc: Stop MLflow server and PostgreSQL
+    cmds:
+      - docker compose down
+
+  mlflow:logs:
+    desc: View MLflow server logs
+    cmds:
+      - docker compose logs -f mlflow
+
+  proto:deps:
+    desc: Install buf if not present
+    cmds:
+      - go install github.com/bufbuild/buf/cmd/buf@latest
+
+  proto:gen:
+    desc: Generate Go code from protos using buf
+    dir: proto
+    cmds:
+      - buf generate
+
+  proto:lint:
+    desc: Lint protos using buf
+    dir: proto
+    cmds:
+      - buf lint
+
+  proto:sync:
+    desc: Update protos from mlflow-ref (see proto/README.md)
+    dir: proto
+    cmds:
+      - echo "Syncing MLflow protos from mlflow-ref/mlflow/protos/"
+      - echo "See proto/README.md for detailed sync instructions"
+      - echo "This task is a reminder - manual curation required"

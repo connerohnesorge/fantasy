@@ -1,0 +1,124 @@
+// Stub file for ScalaPB extensions used in MLflow protos
+// This allows us to compile MLflow protos without ScalaPB tooling
+// The extensions are declared but not used in Go code generation
+
+syntax = "proto2";
+
+package scalapb;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/charmbracelet/fantasy/proto/gen/scalapb";
+
+// File-level options
+message ScalaPbOptions {
+  optional string package_name = 1;
+  optional bool flat_package = 2;
+  optional bool single_file = 3;
+  optional string import = 4 [deprecated = true];
+  repeated string preamble = 5;
+  optional bool single_line_to_proto_string = 6;
+  optional bool no_lenses = 7;
+  optional bool retain_source_code_info = 8;
+  map<string, string> map_type = 9;
+  optional bool no_default_values_in_constructor = 10;
+  optional EnumValueNaming enum_value_naming = 11;
+  optional bool enum_strip_prefix = 12;
+  repeated string bytes_type = 13;
+  optional bool java_conversions = 14;
+  optional FieldTransformation aux_field_options = 15;
+  optional bool preprocessors = 16;
+  repeated string field_transformations = 17;
+  optional bool ignore_all_transformations = 18;
+  optional bool scala3_sources = 19;
+  optional bool getters = 20;
+  optional bool scala_doc = 21;
+  optional bool test_only_no_java_conversions = 99991;
+}
+
+enum EnumValueNaming {
+  AS_IN_PROTO = 0;
+  CAMEL_CASE = 1;
+}
+
+message FieldTransformation {
+  optional string when = 1;
+  optional string set = 2;
+}
+
+// Message-level options
+message MessageOptions {
+  optional string extends = 1;
+  repeated string companion_extends = 2;
+  optional bool no_default_values_in_constructor = 7;
+  optional bool unknown_fields = 8;
+  optional bool no_box = 9;
+  repeated string preamble = 10;
+  repeated MessageOption message_options = 11;
+  optional string sealed_oneof_extends = 12;
+  repeated string sealed_oneof_companion_extends = 13;
+  optional bool sealed_oneof_empty_extends = 14;
+}
+
+message MessageOption {
+  optional string name = 1;
+  optional string value = 2;
+}
+
+// Field-level options
+message FieldOptions {
+  optional string type = 1;
+  optional string scala_name = 2;
+  optional string collection_type = 3;
+  optional string key_type = 4;
+  optional string value_type = 5;
+  optional string annotations = 6;
+  optional string map_type = 7;
+  optional bool no_box = 30;
+  optional bool no_default_value_in_constructor = 31;
+  repeated string preamble = 32;
+  repeated string collection_preamble = 33;
+}
+
+// Enum-level options
+message EnumOptions {
+  repeated string extends = 1;
+  repeated string companion_extends = 2;
+  optional bool no_default_values_in_constructor = 3;
+}
+
+// Enum value options
+message EnumValueOptions {
+  repeated string extends = 1;
+  optional string scala_name = 2;
+}
+
+// Oneof options
+message OneofOptions {
+  optional string extends = 1;
+  optional string sealed_oneof_extends = 2;
+}
+
+extend google.protobuf.FileOptions {
+  optional ScalaPbOptions options = 1020;
+}
+
+extend google.protobuf.MessageOptions {
+  optional MessageOptions message = 1020;
+}
+
+extend google.protobuf.FieldOptions {
+  optional FieldOptions field = 1020;
+}
+
+extend google.protobuf.EnumOptions {
+  optional EnumOptions enum_options = 1020;
+}
+
+extend google.protobuf.EnumValueOptions {
+  optional EnumValueOptions enum_value = 1020;
+}
+
+extend google.protobuf.OneofOptions {
+  optional OneofOptions oneof = 1020;
+}

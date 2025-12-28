@@ -1,0 +1,116 @@
+// Curated from MLflow v3.8.0 assessments.proto
+// Contains Assessment, Feedback, Expectation message definitions for evaluation.
+// Databricks-specific options have been removed.
+
+syntax = "proto2";
+
+package mlflow;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/charmbracelet/fantasy/proto/gen/mlflow";
+option java_package = "org.mlflow.api.proto";
+
+// Source of an assessment.
+message AssessmentSource {
+  // Type of the assessment source.
+  enum SourceType {
+    SOURCE_TYPE_UNSPECIFIED = 0;
+    // Assessment from a human.
+    HUMAN = 1;
+    // Assessment from an LLM Judge.
+    LLM_JUDGE = 2;
+    // Code-based assessment, (e.g. Python UDF).
+    CODE = 3;
+  }
+  // The type of the source.
+  optional SourceType source_type = 1;
+
+  // Identifier for the source.
+  // Example: For human -> user name; for LLM judge -> judge source; for code -> function name.
+  optional string source_id = 2;
+}
+
+// Error that occurred during assessment.
+message AssessmentError {
+  // Value of an assessment when an error has occurred.
+  optional string error_code = 1;
+
+  optional string error_message = 2;
+
+  // Stack trace of the error. Truncated to 1000 characters.
+  optional string stack_trace = 3;
+}
+
+// An expectation for the values or guidelines for the outputs.
+message Expectation {
+  // The value of the expectation-based assessment.
+  // Supported types:
+  // * Numeric values like integers or floats
+  // * Boolean values
+  // * Text value
+  // * List values containing only strings (empty lists allowed).
+  optional google.protobuf.Value value = 2;
+
+  message SerializedValue {
+    // Marks the serialization format for the expectation value.
+    // An example format is "JSON_FORMAT".
+    optional string serialization_format = 1;
+
+    // The value of the expectation-based assessment serialized as a string.
+    optional string value = 2;
+  }
+
+  // The value of the expectation-based assessment serialized as a string.
+  // Only one of either serialized_value or value may be defined.
+  optional SerializedValue serialized_value = 3;
+}
+
+// Feedback provided on the model / agent output(s) contained in the trace
+message Feedback {
+  // Value of the feedback-based assessment.
+  // Supported types:
+  // - Numeric values like integers or floats
+  // - Boolean values
+  // - Text value
+  // - Non-empty list values containing only strings
+  optional google.protobuf.Value value = 2;
+
+  // An error encountered while generating the feedback.
+  optional AssessmentError error = 3;
+}
+
+// Data and metadata for an assessment of a trace.
+message Assessment {
+  // Unique ID of the assessment.
+  optional string assessment_id = 1;
+
+  // Name of the assessment. The name must not contain ".".
+  optional string assessment_name = 2;
+
+  // ID of the trace this assessment is associated with.
+  optional string trace_id = 3;
+
+  // ID of the span within the trace that this assessment is associated with.
+  // If not set, the assessment is associated with the entire trace.
+  optional string span_id = 4;
+
+  // Source of the assessment.
+  optional AssessmentSource source = 5;
+
+  // Timestamp when the assessment was created (Unix timestamp in milliseconds).
+  optional google.protobuf.Timestamp timestamp = 6;
+
+  // Rationale for the assessment.
+  optional string rationale = 7;
+
+  // Additional metadata for the assessment.
+  map<string, string> metadata = 8;
+
+  // The assessment value - either feedback or expectation.
+  oneof value {
+    Feedback feedback = 9;
+    Expectation expectation = 10;
+  }
+}
