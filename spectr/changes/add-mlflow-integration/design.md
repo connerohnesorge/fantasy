@@ -178,25 +178,30 @@ eval/
 LLM and Tool spans are siblings—both are children of the Step span. When a step executes,
 it may involve an LLM call followed by zero or more tool calls, all at the same hierarchical level.
 
-**Note on LLM Span Inference**: Fantasy's callback system provides OnStepStart/OnStepFinish and
-OnToolCall/OnToolResult, but does not expose direct LLM call hooks. LLM spans are therefore
-**inferred retroactively** when OnStepFinish fires:
-- LLM span start time = step start time (from OnStepStart)
-- LLM span end time = first tool call start time (if tools were called) OR step end time (if no tools)
-- This approximation provides useful visibility into LLM execution time
+**LLM Span Tracking with OnLLMStart/OnLLMFinish**: Fantasy's callback system has been extended with
+dedicated LLM-level callbacks for accurate span timing:
+- **OnLLMStart** fires immediately before the LLM API call (Generate or Stream)
+- **OnLLMFinish** fires immediately after the LLM API call completes
+- LLM span timing is **precise** - wall-clock time from API call start to completion
+- Duration includes retry attempts (wraps the entire retry sequence)
+- Token usage is captured at the exact moment it's available (from StreamPartTypeFinish or Generate response)
 
-Token usage is extracted from the step response's `Usage` field when available (provider-dependent).
+**Unified Callbacks**: The same OnLLMStart/OnLLMFinish callbacks work for both streaming (Stream) and
+non-streaming (Generate) modes, providing consistent timing across execution modes.
 
 **Callback Flow**:
 ```
-Agent.Run() starts
+Agent.Run() or Agent.Stream() starts
   → OnAgentStart callback → creates Agent span (root)
     → OnStepStart callback → creates Step span (child of Agent)
+      → OnLLMStart callback → creates LLM span (child of Step)
+        [LLM API call happens - Generate() or Stream()]
+      → OnLLMFinish callback → ends LLM span with usage and timing
       → [Optional] OnToolCall callback → creates Tool span (child of Step)
       → [Optional] OnToolResult callback → ends Tool span
-    → OnStepFinish callback → creates inferred LLM span, ends Step span
+    → OnStepFinish callback → ends Step span
   → OnAgentFinish callback → ends Agent span, flushes trace to MLflow
-Agent.Run() returns
+Agent execution returns
 ```
 
 **SessionID Generation**:

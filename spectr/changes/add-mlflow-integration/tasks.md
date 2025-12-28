@@ -23,6 +23,56 @@
 - [ ] 0.5 Document MLflow setup in root README.md (port 5000, Docker requirement)
   - Context: Quick start guide for local testing
 
+## 0a. Fantasy API Changes (Prerequisite for Tracing)
+
+**Context**: Add OnLLMStart/OnLLMFinish callbacks to Fantasy for accurate LLM span timing in MLflow traces.
+
+- [x] 0a.1 Add OnLLMStartFunc and OnLLMFinishFunc callback types to agent.go
+  - Context: New callbacks for accurate LLM span timing
+  - Acceptance: Callback types defined with correct signatures (model, call, usage, duration, err)
+  - Status: COMPLETED
+- [x] 0a.2 Add OnLLMStart and OnLLMFinish fields to AgentStreamCall struct
+  - Context: Register callbacks for streaming mode
+  - Acceptance: Fields added after OnError in agent-level callbacks section
+  - Status: COMPLETED
+- [x] 0a.3 Add OnLLMStart and OnLLMFinish fields to AgentCall struct
+  - Context: Register callbacks for Generate mode
+  - Acceptance: Fields added after RepairToolCall
+  - Status: COMPLETED
+- [x] 0a.4 Invoke OnLLMStart before LLM call in agent.Stream()
+  - Context: Fire callback before stepModel.Stream() call
+  - Acceptance: Callback receives stepModel and streamCall parameters
+  - Acceptance: Error handling doesn't break agent execution
+  - Status: COMPLETED
+- [x] 0a.5 Update processStepStream signature to receive llmStartTime, llmFinishCalled, stepModel
+  - Context: Need timing data and state tracking for OnLLMFinish
+  - Acceptance: Signature updated, all call sites updated
+  - Status: COMPLETED
+- [x] 0a.6 Invoke OnLLMFinish when StreamPartTypeFinish received in processStepStream
+  - Context: Fire callback when LLM completes with accurate usage
+  - Acceptance: Callback receives usage, finishReason, duration from llmStartTime
+  - Acceptance: Duration calculated accurately
+  - Status: COMPLETED
+- [x] 0a.7 Add deferred OnLLMFinish call in agent.Stream() for error cases
+  - Context: Ensure callback fires even if stream fails early
+  - Acceptance: Deferred call only fires if OnLLMFinish not already called
+  - Status: COMPLETED
+- [x] 0a.8 Invoke OnLLMStart/OnLLMFinish in agent.Generate() method
+  - Context: Non-streaming mode needs same callbacks
+  - Acceptance: Callbacks fire before/after stepModel.Generate()
+  - Acceptance: Duration calculated accurately
+  - Status: COMPLETED
+- [ ] 0a.9 Add unit tests for OnLLMStart/OnLLMFinish callback invocation
+  - Context: Verify callbacks fire at correct times
+  - Acceptance: Test streaming mode
+  - Acceptance: Test Generate mode
+  - Acceptance: Test with nil callbacks (no crash)
+  - Acceptance: Test callback errors (logged, not propagated)
+- [ ] 0a.10 Add integration test for LLM timing accuracy
+  - Context: Verify accurate span timing end-to-end
+  - Acceptance: Compare OnLLMStart/Finish timestamps to actual LLM call duration
+  - Acceptance: Verify duration includes retry attempts
+
 ## 1. Proto Infrastructure Setup
 
 **Context**: Foundation for type-safe MLflow communication. Buf manages proto compilation and linting.
@@ -377,9 +427,10 @@
 - [ ] 8.3 Implement span hierarchy: Agent → Step → [LLM | Tool]
   - Context: MLflow span model; Agent is root, Steps are children, LLM/Tool are grandchildren
   - Note: LLM and Tool spans are **siblings** (both children of Step span, not Tool child of LLM)
-  - Note: LLM spans are **inferred retroactively** from step timing (Fantasy doesn't expose LLM hooks)
+  - Note: LLM spans are created via **OnLLMStart/OnLLMFinish callbacks** (accurate timing)
   - Acceptance: Parent-child relationships stored in span metadata
-  - Acceptance: LLM span created on StepFinish if step had no tool calls
+  - Acceptance: LLM span created on OnLLMStart, ended on OnLLMFinish
+  - REMOVED: Retroactive inference logic (no longer needed)
 - [ ] 8.4 Define span attribute key constants (see tracing spec for full list)
   - Context: Standard keys for span attributes (e.g., `mlflow.spanType`, `mlflow.spanInputs`)
   - Acceptance: Constants for all required MLflow attributes
@@ -397,15 +448,22 @@
   - Note: `WithTracing` lives in **fantasy package** for API consistency
   - Note: `TracingConfig` lives in **tracing package** for separation
   - Acceptance: `NewAgent(..., fantasy.WithTracing(tracingConfig))` works
-- [ ] 8.8 Hook OnStepStart/OnStepFinish for step spans and inferred LLM spans
-  - Context: Fantasy callbacks → span lifecycle
-  - Acceptance: OnStepStart creates step span with input preview
-  - Acceptance: OnStepFinish ends step span, creates LLM span if no tool calls detected
-  - Acceptance: Inferred LLM span timestamps: start=step.start, end=step.end
+- [ ] 8.8 Hook OnStepStart/OnStepFinish for step spans
+  - Context: Fantasy callbacks → step span lifecycle
+  - Acceptance: OnStepStart creates step span with step number
+  - Acceptance: OnStepFinish ends step span with step outputs
+  - Acceptance: Step span captures full step execution
+- [ ] 8.8a Hook OnLLMStart/OnLLMFinish for LLM spans
+  - Context: Fantasy callbacks → accurate LLM span lifecycle
+  - Acceptance: OnLLMStart creates LLM span with model name and call inputs
+  - Acceptance: OnLLMFinish ends LLM span with usage and finish reason
+  - Acceptance: LLM span timestamps are accurate (not inferred)
+  - Acceptance: Duration includes retry attempts
 - [ ] 8.9 Hook OnToolCall/OnToolResult for tool spans
   - Context: Tool execution tracking; handles concurrent tool calls
   - Acceptance: OnToolCall creates tool span with tool name and input
   - Acceptance: OnToolResult ends tool span with output/error
+  - Acceptance: Tool spans are siblings of LLM span (not children)
   - Acceptance: Match spans by tool call ID (enables concurrent tool calls)
 - [ ] 8.10 Implement automatic trace flush on OnAgentFinish (blocking with timeout)
   - Context: Ensure traces reach MLflow when agent completes

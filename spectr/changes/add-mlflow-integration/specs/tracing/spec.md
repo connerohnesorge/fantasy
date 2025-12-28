@@ -280,9 +280,8 @@ The span hierarchy follows: Agent -> Step -> (LLM, Tool)
 LLM and Tool spans are siblings—both are children of the Step span. When a step executes,
 it may involve an LLM call followed by zero or more tool calls, all at the same hierarchical level.
 
-Note: LLM spans are inferred from step timing since Fantasy callbacks do not provide
-direct LLM call/result hooks. This approximation captures the primary LLM interaction
-per step but may not reflect retry attempts or multi-model scenarios.
+Note: LLM spans are created using OnLLMStart/OnLLMFinish callbacks that fire directly before and
+after LLM API calls. This provides accurate wall-clock timing including retry attempts.
 
 #### Scenario: Agent span
 - GIVEN an agent execution starts (OnAgentStart fires)
@@ -298,21 +297,23 @@ per step but may not reflect retry attempts or multi-model scenarios.
 - AND span name includes step number (e.g., "step-1")
 - AND parent_span_id references the agent span
 
-#### Scenario: LLM span (inferred)
-- GIVEN a step span is active
-- WHEN the step completes (OnStepFinish fires)
-- THEN an LLM span is created retroactively as child of step span
+#### Scenario: LLM span (with OnLLMStart/OnLLMFinish)
+- GIVEN a step is executing
+- WHEN OnLLMStart callback fires (immediately before LLM API call)
+- THEN an LLM span is created as child of step span
 - AND span type is set to LLM
 - AND span name is formatted as `llm-<model_name>` (e.g., "llm-gpt-4")
-- AND LLM span timing is calculated as:
-  - `start_time_ns` = step start time (from OnStepStart)
-  - `end_time_ns` = first tool call start time (if any tools called) OR step end time (if no tools)
-- AND in multi-tool scenarios (multiple concurrent or sequential tool calls):
-  - Only ONE LLM span is inferred per step
-  - The LLM span covers the time from step start to the EARLIEST tool call start time
-  - This represents the initial LLM response generation before any tool execution
-- AND token usage from the step response's Usage field is attached to the LLM span
-- AND if no Usage field is available (provider-dependent), token usage attributes are omitted
+- AND span start time is set to current timestamp (nanoseconds since epoch)
+- AND span inputs are captured from the Call parameter (messages, tools, temperature, etc.)
+- WHEN OnLLMFinish callback fires (immediately after LLM API call completes)
+- THEN LLM span end time is set to current timestamp
+- AND LLM span timing is **accurate**: `duration = end_time - start_time` (wall-clock time)
+- AND duration **includes retry attempts** (wraps the entire retry sequence)
+- AND token usage from the Usage parameter is attached to the LLM span
+- AND finish reason from the FinishReason parameter is recorded
+- AND if an error occurred, span status is set to ERROR with error description
+- AND if no token usage is available (Usage.TotalTokens == 0), token usage attributes are omitted
+- NOTE: Only ONE LLM span is created per step (one LLM call per step in Fantasy's execution model)
 
 #### Scenario: Tool span
 - GIVEN a tool is executed during a step
