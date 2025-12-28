@@ -1,0 +1,25 @@
+version: v2
+managed:
+  enabled: true
+  disable:
+    - module: buf.build/googleapis/googleapis
+    - module: buf.build/opentelemetry/opentelemetry
+  override:
+    - file_option: go_package_prefix
+      value: github.com/charmbracelet/fantasy/proto/gen
+    - file_option: go_package
+      module: buf.build/opentelemetry/opentelemetry
+      value: go.opentelemetry.io/proto/otlp
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: gen
+    opt:
+      - paths=source_relative
+      - Mgoogle/protobuf/any.proto=google.golang.org/protobuf/types/known/anypb
+      - Mgoogle/protobuf/duration.proto=google.golang.org/protobuf/types/known/durationpb
+      - Mgoogle/protobuf/struct.proto=google.golang.org/protobuf/types/known/structpb
+      - Mgoogle/protobuf/timestamp.proto=google.golang.org/protobuf/types/known/timestamppb
+      - Mgoogle/protobuf/field_mask.proto=google.golang.org/protobuf/types/known/fieldmaskpb
+      - Mopentelemetry/proto/common/v1/common.proto=go.opentelemetry.io/proto/otlp/common/v1
+      - Mopentelemetry/proto/resource/v1/resource.proto=go.opentelemetry.io/proto/otlp/resource/v1
+      - Mopentelemetry/proto/trace/v1/trace.proto=go.opentelemetry.io/proto/otlp/trace/v1

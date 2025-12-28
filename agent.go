@@ -169,6 +169,10 @@ type AgentCall struct {
 	StopWhen       []StopCondition
 	PrepareStep    PrepareStepFunction
 	RepairToolCall RepairToolCallFunction
+
+	// LLM-level callbacks
+	OnLLMStart  OnLLMStartFunc  // Called immediately before LLM API call
+	OnLLMFinish OnLLMFinishFunc // Called immediately after LLM API call completes
 }
 
 // Agent-level callbacks.
@@ -184,6 +188,12 @@ type (
 
 	// OnStepFinishFunc is called when a step finishes.
 	OnStepFinishFunc func(stepResult StepResult) error
+
+	// OnLLMStartFunc is called immediately before an LLM API call.
+	OnLLMStartFunc func(model LanguageModel, messages []Message) error
+
+	// OnLLMFinishFunc is called immediately after an LLM API call completes.
+	OnLLMFinishFunc func(usage Usage, finishReason FinishReason, err error) error
 
 	// OnFinishFunc is called when entire agent completes.
 	OnFinishFunc func(result *AgentResult)
@@ -266,6 +276,8 @@ type AgentStreamCall struct {
 	OnAgentFinish OnAgentFinishFunc // Called when agent finishes
 	OnStepStart   OnStepStartFunc   // Called when a step starts
 	OnStepFinish  OnStepFinishFunc  // Called when a step finishes
+	OnLLMStart    OnLLMStartFunc    // Called immediately before LLM API call
+	OnLLMFinish   OnLLMFinishFunc   // Called immediately after LLM API call completes
 	OnFinish      OnFinishFunc      // Called when entire agent completes
 	OnError       OnErrorFunc       // Called when an error occurs
 
@@ -435,6 +447,13 @@ func (a *agent) Generate(ctx context.Context, opts AgentCall) (*AgentResult, err
 		retryOptions.OnRetry = opts.OnRetry
 		retry := RetryWithExponentialBackoffRespectingRetryHeaders[*Response](retryOptions)
 
+		// Call OnLLMStart before LLM call (wraps retry sequence)
+		if opts.OnLLMStart != nil {
+			if err := opts.OnLLMStart(stepModel, stepInputMessages); err != nil {
+				return nil, err
+			}
+		}
+
 		result, err := retry(ctx, func() (*Response, error) {
 			return stepModel.Generate(ctx, Call{
 				Prompt:           stepInputMessages,
@@ -449,6 +468,20 @@ func (a *agent) Generate(ctx context.Context, opts AgentCall) (*AgentResult, err
 				ProviderOptions:  opts.ProviderOptions,
 			})
 		})
+
+		// Call OnLLMFinish after LLM call completes (with error or success)
+		if opts.OnLLMFinish != nil {
+			var usage Usage
+			var finishReason FinishReason
+			if result != nil {
+				usage = result.Usage
+				finishReason = result.FinishReason
+			}
+			if finishErr := opts.OnLLMFinish(usage, finishReason, err); finishErr != nil {
+				return nil, finishErr
+			}
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -838,6 +871,25 @@ func (a *agent) Stream(ctx context.Context, opts AgentStreamCall) (*AgentResult,
 		retryOptions.OnRetry = call.OnRetry
 		retry := RetryWithExponentialBackoffRespectingRetryHeaders[stepExecutionResult](retryOptions)
 
+		// Call OnLLMStart before LLM call (wraps retry sequence)
+		if opts.OnLLMStart != nil {
+			if err := opts.OnLLMStart(stepModel, stepInputMessages); err != nil {
+				return nil, err
+			}
+		}
+
+		// Track whether OnLLMFinish was called to handle error cases
+		var llmFinishCalled bool
+		var resultUsage Usage
+		var resultFinishReason FinishReason
+
+		defer func() {
+			// Ensure OnLLMFinish is called even in error cases
+			if !llmFinishCalled && opts.OnLLMFinish != nil {
+				_ = opts.OnLLMFinish(resultUsage, resultFinishReason, err)
+			}
+		}()
+
 		result, err := retry(ctx, func() (stepExecutionResult, error) {
 			// Create the stream
 			stream, err := stepModel.Stream(ctx, streamCall)
@@ -858,6 +910,16 @@ func (a *agent) Stream(ctx context.Context, opts AgentStreamCall) (*AgentResult,
 				opts.OnError(err)
 			}
 			return nil, err
+		}
+
+		// Call OnLLMFinish after successful LLM call
+		resultUsage = result.StepResult.Usage
+		resultFinishReason = result.StepResult.FinishReason
+		if opts.OnLLMFinish != nil {
+			if finishErr := opts.OnLLMFinish(resultUsage, resultFinishReason, nil); finishErr != nil {
+				return nil, finishErr
+			}
+			llmFinishCalled = true
 		}
 
 		steps = append(steps, result.StepResult)

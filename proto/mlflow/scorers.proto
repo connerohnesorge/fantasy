@@ -1,0 +1,121 @@
+// Curated from MLflow v3.8.0 service.proto
+// Contains Scorer registration and management message definitions.
+// Databricks-specific options and gRPC service definitions have been removed.
+
+syntax = "proto2";
+
+package mlflow;
+
+option go_package = "github.com/charmbracelet/fantasy/proto/gen/mlflow";
+option java_package = "org.mlflow.api.proto";
+
+// Scorer entity representing a scorer in the database.
+message Scorer {
+  // The experiment ID.
+  optional int32 experiment_id = 1;
+
+  // The scorer name.
+  optional string scorer_name = 2;
+
+  // The scorer version.
+  optional int32 scorer_version = 3;
+
+  // The serialized scorer string (JSON).
+  optional string serialized_scorer = 4;
+
+  // The creation time of the scorer version (Unix timestamp in milliseconds).
+  optional int64 creation_time = 5;
+
+  // The unique identifier for the scorer.
+  optional string scorer_id = 6;
+}
+
+// Request to register a scorer for an experiment.
+message RegisterScorer {
+  // The experiment ID.
+  optional string experiment_id = 1;
+
+  // The scorer name.
+  optional string name = 2;
+
+  // The serialized scorer string (JSON).
+  optional string serialized_scorer = 3;
+
+  message Response {
+    // The new version number for the scorer.
+    optional int32 version = 1;
+
+    // The unique identifier for the scorer.
+    optional string scorer_id = 2;
+
+    // The experiment ID (same as request).
+    optional string experiment_id = 3;
+
+    // The scorer name (same as request).
+    optional string name = 4;
+
+    // The serialized scorer string (same as request).
+    optional string serialized_scorer = 5;
+
+    // The creation time of the scorer version (Unix timestamp in milliseconds).
+    optional int64 creation_time = 6;
+  }
+}
+
+// Request to list all scorers for an experiment.
+message ListScorers {
+  // The experiment ID.
+  optional string experiment_id = 1;
+
+  message Response {
+    // List of scorer entities (latest version for each scorer name).
+    repeated Scorer scorers = 1;
+  }
+}
+
+// Request to list all versions of a specific scorer for an experiment.
+message ListScorerVersions {
+  // The experiment ID.
+  optional string experiment_id = 1;
+
+  // The scorer name.
+  optional string name = 2;
+
+  message Response {
+    // List of scorer entities for all versions of the scorer.
+    repeated Scorer scorers = 1;
+  }
+}
+
+// Request to get a specific scorer for an experiment.
+message GetScorer {
+  // The experiment ID.
+  optional string experiment_id = 1;
+
+  // The scorer name.
+  optional string name = 2;
+
+  // The scorer version. If not specified, returns the scorer with maximum version.
+  optional int32 version = 3;
+
+  message Response {
+    // The scorer entity.
+    optional Scorer scorer = 1;
+  }
+}
+
+// Request to delete a scorer for an experiment.
+message DeleteScorer {
+  // The experiment ID.
+  optional string experiment_id = 1;
+
+  // The scorer name.
+  optional string name = 2;
+
+  // The scorer version to delete. If not specified, deletes all versions.
+  optional int32 version = 3;
+
+  message Response {
+    // Empty response.
+  }
+}

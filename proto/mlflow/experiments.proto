@@ -1,0 +1,219 @@
+// Curated from MLflow v3.8.0 service.proto
+// Contains Experiment, Run, Metric, Param message definitions for REST API use.
+// Databricks-specific options and gRPC service definitions have been removed.
+
+syntax = "proto2";
+
+package mlflow;
+
+option go_package = "github.com/charmbracelet/fantasy/proto/gen/mlflow";
+option java_package = "org.mlflow.api.proto";
+
+// Experiment metadata.
+message Experiment {
+  // Unique identifier for the experiment.
+  optional string experiment_id = 1;
+
+  // Human readable name that identifies the experiment.
+  optional string name = 2;
+
+  // Location where artifacts for the experiment are stored.
+  optional string artifact_location = 3;
+
+  // Current life cycle stage of the experiment: "active" or "deleted".
+  // Deleted experiments are not returned by APIs.
+  optional string lifecycle_stage = 4;
+
+  // Last update time (Unix timestamp in milliseconds).
+  optional int64 last_update_time = 5;
+
+  // Creation time (Unix timestamp in milliseconds).
+  optional int64 creation_time = 6;
+
+  // Tags: Additional metadata key-value pairs.
+  repeated ExperimentTag tags = 7;
+}
+
+// Tag for an experiment.
+message ExperimentTag {
+  // The tag key.
+  optional string key = 1;
+  // The tag value.
+  optional string value = 2;
+}
+
+// Run metadata and data.
+message Run {
+  // Run metadata.
+  optional RunInfo info = 1;
+  // Run data.
+  optional RunData data = 2;
+  // Run inputs.
+  optional RunInputs inputs = 3;
+  // Run outputs.
+  optional RunOutputs outputs = 4;
+}
+
+// Metadata of a single run.
+message RunInfo {
+  // Unique identifier for the run.
+  optional string run_id = 15;
+
+  // [Deprecated, use run_id instead] Unique identifier for the run.
+  optional string run_uuid = 1;
+
+  // The name of the run.
+  optional string run_name = 3;
+
+  // The experiment ID.
+  optional string experiment_id = 2;
+
+  // User who initiated the run.
+  optional string user_id = 6;
+
+  // Current status of the run.
+  optional RunStatus status = 7;
+
+  // Unix timestamp of when the run started in milliseconds.
+  optional int64 start_time = 8;
+
+  // Unix timestamp of when the run ended in milliseconds.
+  optional int64 end_time = 9;
+
+  // URI of the directory where artifacts should be uploaded.
+  optional string artifact_uri = 13;
+
+  // Current life cycle stage of the run: "active" or "deleted".
+  optional string lifecycle_stage = 14;
+}
+
+// Status of a run.
+enum RunStatus {
+  RUNNING = 1;
+  SCHEDULED = 2;
+  FINISHED = 3;
+  FAILED = 4;
+  KILLED = 5;
+}
+
+// Run data (metrics, params, and tags).
+message RunData {
+  // Run metrics.
+  repeated Metric metrics = 1;
+  // Run parameters.
+  repeated Param params = 2;
+  // Additional metadata key-value pairs.
+  repeated RunTag tags = 3;
+}
+
+// Run inputs.
+message RunInputs {
+  // Dataset inputs to the Run.
+  repeated DatasetInput dataset_inputs = 1;
+  // Model inputs to the Run.
+  repeated ModelInput model_inputs = 2;
+}
+
+// Outputs of a Run.
+message RunOutputs {
+  // Model outputs of the Run.
+  repeated ModelOutput model_outputs = 1;
+}
+
+// Tag for a run.
+message RunTag {
+  // The tag key.
+  optional string key = 1;
+  // The tag value.
+  optional string value = 2;
+}
+
+// Metric associated with a run.
+message Metric {
+  // Key identifying this metric.
+  optional string key = 1;
+
+  // Value associated with this metric.
+  optional double value = 2;
+
+  // The timestamp at which this metric was recorded (Unix timestamp in milliseconds).
+  optional int64 timestamp = 3;
+
+  // Step at which to log the metric.
+  optional int64 step = 4 [default = 0];
+
+  // The name of the dataset associated with the metric.
+  optional string dataset_name = 5;
+
+  // Dataset digest of the dataset associated with the metric.
+  optional string dataset_digest = 6;
+
+  // The ID of the LoggedModel or Registered Model Version associated with the metric.
+  optional string model_id = 7;
+
+  // The ID of the run containing the metric.
+  optional string run_id = 8;
+}
+
+// Param associated with a run.
+message Param {
+  // Key identifying this param.
+  optional string key = 1;
+
+  // Value associated with this param.
+  optional string value = 2;
+}
+
+// DatasetInput. Represents a dataset and input tags.
+message DatasetInput {
+  // A list of tags for the dataset input, e.g. a "context" tag with value "training"
+  repeated InputTag tags = 1;
+
+  // The dataset being used as a Run input.
+  optional Dataset dataset = 2;
+}
+
+// Dataset. Represents a reference to data used for training, testing, or evaluation.
+message Dataset {
+  // The name of the dataset. E.g. "my.uc.table@2" "nyc-taxi-dataset", "fantastic-elk-3"
+  optional string name = 1;
+
+  // Dataset digest, e.g. an md5 hash of the dataset that uniquely identifies it
+  // within datasets of the same name.
+  optional string digest = 2;
+
+  // The type of the dataset source, e.g. 'databricks-uc-table', 'DBFS', 'S3', ...
+  optional string source_type = 3;
+
+  // Source information for the dataset.
+  optional string source = 4;
+
+  // The schema of the dataset.
+  optional string schema = 5;
+
+  // The profile of the dataset. Summary statistics for the dataset.
+  optional string profile = 6;
+}
+
+// Tag for an input.
+message InputTag {
+  // The tag key.
+  optional string key = 1;
+  // The tag value.
+  optional string value = 2;
+}
+
+// Represents a LoggedModel or Registered Model Version input to a Run.
+message ModelInput {
+  // The unique identifier of the model.
+  optional string model_id = 1;
+}
+
+// Represents a LoggedModel output of a Run.
+message ModelOutput {
+  // The unique identifier of the model.
+  optional string model_id = 1;
+
+  // Step at which the model was produced.
+  optional int64 step = 2;
+}

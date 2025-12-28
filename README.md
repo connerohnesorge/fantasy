@@ -62,6 +62,38 @@ fmt.Println(result.Response.Content.Text())
 
 🍔 For the full implementation and more [see the examples directory](https://github.com/charmbracelet/fantasy/tree/main/examples).
 
+## MLflow Integration
+
+Fantasy includes built-in support for [MLflow](https://mlflow.org/) tracking and evaluation. A local MLflow server can be started using Docker Compose.
+
+### Prerequisites
+
+- Docker and Docker Compose installed and running
+
+### Quick Start
+
+Start the MLflow server (runs on port 5000):
+
+```bash
+task mlflow:start
+```
+
+View server logs:
+
+```bash
+task mlflow:logs
+```
+
+Stop the server:
+
+```bash
+task mlflow:stop
+```
+
+Once running, the MLflow UI will be available at [http://localhost:5000](http://localhost:5000).
+
+The MLflow server uses PostgreSQL as the backend store and includes persistent volumes for both the database and artifact storage.
+
 ## Multi-model? Multi-provider?
 
 Yeah! Fantasy is designed to support a wide variety of providers and models under a single API. While many providers such as Microsoft Azure, Amazon Bedrock, and OpenRouter have dedicated packages in Fantasy, many others work just fine with `openaicompat`, the generic OpenAI-compatible layer. That said, if you find a provider that’s not compatible and needs special treatment, please let us know in an issue (or open a PR).
