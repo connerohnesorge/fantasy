@@ -120,7 +120,8 @@ func (s TraceState) String() string {
 
 // Trace represents a complete trace with metadata and spans.
 type Trace struct {
-	TraceID           string
+	TraceID           string // MLflow trace ID format: "tr-<hex>"
+	OtelTraceID       string // Raw OTel trace ID (32 hex chars) used for span linkage
 	ExperimentID      string
 	RequestTime       int64 // Milliseconds since epoch
 	ExecutionDuration int64 // Milliseconds

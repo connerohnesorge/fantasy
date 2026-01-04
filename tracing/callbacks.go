@@ -74,7 +74,7 @@ func (tc *Callbacks) OnAgentFinish(ctx context.Context, response string) error {
 	if trace != nil {
 		trace.mu.Lock()
 		trace.ExecutionDuration = (nowNanos() - (trace.RequestTime * 1_000_000)) / 1_000_000 // Convert to milliseconds
-		trace.SetState(TraceStateOK)
+		trace.State = TraceStateOK // Set directly since we already hold the lock
 		trace.mu.Unlock()
 	}
 
@@ -224,14 +224,25 @@ func (tc *Callbacks) flush(ctx context.Context) error {
 		return tc.result.FlushError
 	}
 
-	// Upload to MLflow
+	// Upload trace info to MLflow via v3 API
 	traceID, err := tc.client.StartTrace(flushCtx, pbTrace)
 	if err != nil {
 		tc.result = &TracingResult{
 			Trace:      trace,
-			FlushError: fmt.Errorf("failed to upload trace to MLflow: %w", err),
+			FlushError: fmt.Errorf("failed to upload trace info to MLflow: %w", err),
 		}
 		return tc.result.FlushError
+	}
+
+	// Upload spans via OTLP endpoint (required for MLflow >= 3.4)
+	if len(pbTrace.Spans) > 0 {
+		if err := tc.client.LogSpans(flushCtx, tc.experimentID, pbTrace.Spans); err != nil {
+			tc.result = &TracingResult{
+				Trace:      trace,
+				FlushError: fmt.Errorf("failed to upload spans to MLflow: %w", err),
+			}
+			return tc.result.FlushError
+		}
 	}
 
 	// Success

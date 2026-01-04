@@ -8,8 +8,8 @@ import (
 	"charm.land/fantasy/tracing"
 )
 
-// ExampleTracingCallbacks demonstrates how to use tracing with a Fantasy agent.
-func ExampleTracingCallbacks() {
+// ExampleNewTracingCallbacks demonstrates how to use tracing with a Fantasy agent.
+func ExampleNewTracingCallbacks() {
 	// Create MLflow client
 	client := mlflow.New("http://localhost:5000")
 

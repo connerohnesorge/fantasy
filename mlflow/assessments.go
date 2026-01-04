@@ -100,13 +100,20 @@ func (c *Client) CreateAssessment(ctx context.Context, traceID string, assessmen
 	// Build the API path
 	path := fmt.Sprintf("/api/3.0/mlflow/traces/%s/assessments", traceID)
 
-	// Make the request using direct JSON marshaling (not protobuf)
-	var result Assessment
-	if err := c.doJSONRequest(ctx, http.MethodPost, path, assessment, &result); err != nil {
+	// The API expects the assessment to be wrapped in an "assessment" key
+	requestBody := map[string]any{
+		"assessment": assessment,
+	}
+
+	// Response will contain the created assessment wrapped in "assessment" key
+	var result struct {
+		Assessment Assessment `json:"assessment"`
+	}
+	if err := c.doJSONRequest(ctx, http.MethodPost, path, requestBody, &result); err != nil {
 		return nil, err
 	}
 
-	return &result, nil
+	return &result.Assessment, nil
 }
 
 // UpdateAssessment updates an existing assessment.

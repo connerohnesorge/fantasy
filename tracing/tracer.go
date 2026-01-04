@@ -22,14 +22,22 @@ func NewTracer(config TracingConfig) *Tracer {
 	}
 }
 
+// TraceIDPrefix is the prefix MLflow uses for trace IDs.
+const TraceIDPrefix = "tr-"
+
 // StartTrace creates a new trace with the given request.
 func (t *Tracer) StartTrace(request string) *Trace {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	traceID := generateID()
+	// Generate the raw OTel trace ID (16 bytes as hex = 32 chars)
+	otelTraceID := generateID()
+	// MLflow trace ID uses the "tr-" prefix
+	traceID := TraceIDPrefix + otelTraceID
+
 	t.trace = &Trace{
 		TraceID:        traceID,
+		OtelTraceID:    otelTraceID, // Store raw OTel trace ID for spans
 		ExperimentID:   t.config.ExperimentID,
 		RequestTime:    nowMillis(),
 		State:          TraceStateInProgress,
@@ -70,7 +78,7 @@ func (t *Tracer) StartSpan(name string, spanType SpanType) *Span {
 		return nil
 	}
 
-	spanID := generateID()
+	spanID := generateSpanID()
 	var parentID string
 
 	// Determine parent based on span stack
@@ -79,7 +87,7 @@ func (t *Tracer) StartSpan(name string, spanType SpanType) *Span {
 	}
 
 	span := &Span{
-		TraceID:     t.trace.TraceID,
+		TraceID:     t.trace.OtelTraceID, // Use OTel trace ID for span linkage
 		SpanID:      spanID,
 		ParentID:    parentID,
 		Name:        name,
@@ -189,12 +197,23 @@ func (t *Tracer) EndOrphanSpans() {
 	t.spanStack = make([]*Span, 0)
 }
 
-// generateID generates a random 16-byte hex-encoded ID.
+// generateID generates a random 16-byte hex-encoded ID (for trace IDs).
 func generateID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// Fallback to pseudo-random if crypto/rand fails
 		// In practice, this should never happen
+		for i := range b {
+			b[i] = byte(i)
+		}
+	}
+	return hex.EncodeToString(b)
+}
+
+// generateSpanID generates a random 8-byte hex-encoded ID (for span IDs).
+func generateSpanID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
 		for i := range b {
 			b[i] = byte(i)
 		}

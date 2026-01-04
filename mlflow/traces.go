@@ -1,10 +1,15 @@
 package mlflow
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 
 	pb "charm.land/fantasy/proto/gen/mlflow"
+	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // SearchTracesOptions defines options for searching traces.
@@ -73,6 +78,99 @@ func (c *Client) StartTrace(ctx context.Context, trace *pb.Trace) (string, error
 	}
 
 	return *resp.Trace.TraceInfo.TraceId, nil
+}
+
+// LogSpans uploads spans to MLflow using the OTLP (OpenTelemetry) endpoint.
+// This is required for MLflow server >= 3.4 where spans are stored separately
+// from trace info via the /v1/traces endpoint.
+//
+// Parameters:
+//   - ctx: Context for the request
+//   - experimentID: The experiment ID to associate spans with
+//   - spans: The OpenTelemetry spans to upload
+//
+// Returns an error if the upload fails.
+func (c *Client) LogSpans(ctx context.Context, experimentID string, spans []*tracev1.Span) error {
+	if len(spans) == 0 {
+		return nil
+	}
+
+	if experimentID == "" {
+		return &ValidationError{
+			Field:   "experimentID",
+			Message: "experimentID cannot be empty",
+			Value:   "",
+		}
+	}
+
+	// Build the TracesData message (same structure as ExportTraceServiceRequest)
+	tracesData := &tracev1.TracesData{
+		ResourceSpans: []*tracev1.ResourceSpans{
+			{
+				ScopeSpans: []*tracev1.ScopeSpans{
+					{
+						Spans: spans,
+					},
+				},
+			},
+		},
+	}
+
+	// Serialize the request as protobuf
+	data, err := proto.Marshal(tracesData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal spans: %w", err)
+	}
+
+	// Make the request to the OTLP endpoint
+	if err := c.doOTLPRequest(ctx, experimentID, data); err != nil {
+		return fmt.Errorf("failed to log spans: %w", err)
+	}
+
+	return nil
+}
+
+// doOTLPRequest sends a protobuf request to the OTLP /v1/traces endpoint.
+func (c *Client) doOTLPRequest(ctx context.Context, experimentID string, data []byte) error {
+	url := c.baseURL + "/v1/traces"
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
+	if err != nil {
+		return &ConnectionError{
+			URL:     url,
+			Message: "failed to create request",
+			Cause:   err,
+		}
+	}
+
+	// Set required headers
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("x-mlflow-experiment-id", experimentID)
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	// Execute request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		if isNetworkError(err) {
+			return &ConnectionError{
+				URL:     url,
+				Message: err.Error(),
+				Cause:   err,
+			}
+		}
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for errors
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return c.parseAPIError(resp.StatusCode, body)
+	}
+
+	return nil
 }
 
 // GetTrace retrieves a trace by ID.

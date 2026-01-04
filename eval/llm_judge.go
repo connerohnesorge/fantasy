@@ -343,3 +343,66 @@ Evaluate whether the generated output is grounded in the provided context. Ident
 		PromptTemplate: promptTemplate,
 	})
 }
+
+// NewHelpfulnessJudge creates a judge that evaluates how helpful and actionable a response is.
+func NewHelpfulnessJudge(model fantasy.LanguageModel) *LLMJudge {
+	systemPrompt := `You are an expert evaluator assessing the helpfulness and actionability of AI-generated responses.
+Your task is to evaluate whether the response provides useful, practical, and complete assistance.
+
+Scoring Guidelines:
+- Score 5: Extremely helpful - provides complete, actionable guidance with clear steps
+- Score 4: Very helpful - mostly complete with minor gaps in guidance
+- Score 3: Moderately helpful - provides some useful information but lacks depth or actionability
+- Score 2: Minimally helpful - vague, incomplete, or hard to act upon
+- Score 1: Not helpful - irrelevant, confusing, or provides no useful information
+
+Consider clarity, completeness, practicality, and whether the user could act on the response.`
+
+	promptTemplate := `# User Question/Request:
+{{.Expected}}
+
+# Generated Response:
+{{.Output}}
+
+# Instructions:
+Evaluate how helpful the response is for addressing the user's question or request. Consider whether it provides actionable guidance, is complete, and would genuinely assist the user.`
+
+	return NewLLMJudge("helpfulness", JudgeConfig{
+		Model:          model,
+		SystemPrompt:   systemPrompt,
+		PromptTemplate: promptTemplate,
+	})
+}
+
+// NewToolUsageJudge creates a judge that evaluates whether an agent used tools correctly.
+func NewToolUsageJudge(model fantasy.LanguageModel) *LLMJudge {
+	systemPrompt := `You are an expert evaluator assessing whether an AI agent used tools correctly.
+Your task is to compare actual tool calls against expected tool calls and evaluate appropriateness.
+
+Scoring Guidelines:
+- Score 5: Perfect tool usage - called correct tools with correct arguments in correct order
+- Score 4: Good tool usage - mostly correct with minor argument differences
+- Score 3: Partial tool usage - right tools but wrong arguments, or missing some tools
+- Score 2: Poor tool usage - called wrong tools or significantly wrong arguments
+- Score 1: Failed tool usage - completely wrong tools or no tools when expected
+
+Focus on: tool names, argument values, order of calls, and whether the tools were appropriate for the task.`
+
+	promptTemplate := `# Expected Tool Calls:
+{{.Expected}}
+
+# Actual Tool Calls Made:
+{{.Output}}
+
+# Original Request:
+{{.Context}}
+
+# Instructions:
+Evaluate whether the agent used the correct tools with appropriate arguments. Compare actual vs expected tool calls and explain any discrepancies.`
+
+	return NewLLMJudge("tool_usage", JudgeConfig{
+		Model:          model,
+		SystemPrompt:   systemPrompt,
+		PromptTemplate: promptTemplate,
+	})
+}
