@@ -64,29 +64,53 @@ fmt.Println(result.Response.Content.Text())
 
 ## MLflow Integration
 
-Fantasy includes built-in support for [MLflow](https://mlflow.org/) tracking and evaluation. A local MLflow server can be started using Docker Compose.
+Fantasy includes built-in support for [MLflow](https://mlflow.org/) for observability, tracing, and evaluation.
 
-### Prerequisites
+### Packages
 
-- Docker and Docker Compose installed and running
+| Package | Description |
+|---------|-------------|
+| [`mlflow`](./mlflow/) | REST client for MLflow API v2.0/v3.0 (experiments, runs, traces, assessments) |
+| [`tracing`](./tracing/) | MLflow-compatible distributed tracing with span hierarchy |
+| [`eval`](./eval/) | Evaluation framework with heuristic and LLM-as-judge scorers |
 
-### Quick Start
+### Quick Example
 
-Start the MLflow server (runs on port 5000):
+```go
+import (
+    "charm.land/fantasy/mlflow"
+    "charm.land/fantasy/tracing"
+)
+
+// Create MLflow client
+client := mlflow.New("http://localhost:5000", mlflow.WithToken("your-token"))
+
+// Configure tracing
+config := tracing.TracingConfig{
+    Client:       client,
+    ExperimentID: "1",
+    AgentName:    "my-agent",
+}
+
+// Create tracing callbacks for your agent
+callbacks := tracing.NewTracingCallbacks(config)
+
+// The callbacks integrate with Fantasy's agent to automatically
+// trace agent execution, LLM calls, and tool invocations
+```
+
+### Local MLflow Server
+
+A local MLflow server can be started using Docker Compose:
 
 ```bash
+# Start the server (runs on port 5000)
 task mlflow:start
-```
 
-View server logs:
-
-```bash
+# View server logs
 task mlflow:logs
-```
 
-Stop the server:
-
-```bash
+# Stop the server
 task mlflow:stop
 ```
 

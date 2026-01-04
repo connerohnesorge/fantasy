@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -20,7 +18,7 @@ services:
     restart: unless-stopped
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.18.0
+    image: ghcr.io/mlflow/mlflow:v3.8.1
     container_name: mlflow-server
     depends_on:
       postgres:
@@ -33,11 +31,11 @@ services:
     volumes:
       - mlflow_artifacts:/mlflow/artifacts
     command: >
-      mlflow server
+      sh -c "pip install psycopg2-binary && mlflow server
       --backend-store-uri postgresql://mlflow:mlflow@postgres:5432/mlflow
       --default-artifact-root /mlflow/artifacts
       --host 0.0.0.0
-      --port 5000
+      --port 5000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s

@@ -334,19 +334,19 @@
       "id": "3.18",
       "section": "MLflow REST Client",
       "description": "Add unit tests with mock HTTP server (httptest)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "3.19",
       "section": "MLflow REST Client",
       "description": "Add integration test against local MLflow server (manual)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "3.20",
       "section": "MLflow REST Client",
       "description": "Write `mlflow/README.md` with usage examples",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "4.1",
@@ -454,175 +454,175 @@
       "id": "5.1",
       "section": "Built-in Heuristic Scorers",
       "description": "Create `eval/heuristic_scorers.go` file for heuristic implementations",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.2",
       "section": "Built-in Heuristic Scorers",
       "description": "Implement `ExactMatch` scorer (string equality)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.3",
       "section": "Built-in Heuristic Scorers",
       "description": "Implement `Contains` scorer (substring match)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.4",
       "section": "Built-in Heuristic Scorers",
       "description": "Implement `Regex` scorer (pattern matching)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.5",
       "section": "Built-in Heuristic Scorers",
       "description": "Implement `JSONMatch` scorer (structural comparison)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.6",
       "section": "Built-in Heuristic Scorers",
       "description": "5.5a Define `JSONMatchOptions` struct",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.7",
       "section": "Built-in Heuristic Scorers",
       "description": "Implement `NumericRange` scorer (value in range)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.8",
       "section": "Built-in Heuristic Scorers",
       "description": "Implement `ToolCallTrajectory` scorer (tool sequence validation)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.9",
       "section": "Built-in Heuristic Scorers",
       "description": "5.7a Define `ToolCallTrajectoryOptions` struct",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.10",
       "section": "Built-in Heuristic Scorers",
       "description": "Implement `StepValidation` scorer (step count and content validation)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.11",
       "section": "Built-in Heuristic Scorers",
       "description": "5.8a Define `StepValidationOptions` struct",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "5.12",
       "section": "Built-in Heuristic Scorers",
       "description": "Add unit tests for all heuristic scorers",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.1",
       "section": "LLM-as-Judge Scorers",
       "description": "Create `eval/llm_judge.go` with base LLM judge implementation",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.2",
       "section": "LLM-as-Judge Scorers",
       "description": "Define `JudgeConfig` with model, prompt template, output schema, Temperature",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.3",
       "section": "LLM-as-Judge Scorers",
       "description": "Implement `Correctness` scorer (answer accuracy)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.4",
       "section": "LLM-as-Judge Scorers",
       "description": "Implement `Guidelines` scorer (custom criteria)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.5",
       "section": "LLM-as-Judge Scorers",
       "description": "Implement `Relevance` scorer",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.6",
       "section": "LLM-as-Judge Scorers",
       "description": "Implement `Groundedness` scorer",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.7",
       "section": "LLM-as-Judge Scorers",
       "description": "Add structured output parsing for judge responses",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.8",
       "section": "LLM-as-Judge Scorers",
       "description": "Add retry logic for LLM API failures",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "6.9",
       "section": "LLM-as-Judge Scorers",
       "description": "Add unit tests with mocked LLM responses",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.1",
       "section": "MLflow Export for Evaluation",
       "description": "Create `eval/mlflow_export.go` with converter functions",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.2",
       "section": "MLflow Export for Evaluation",
       "description": "Implement `ScoreToAssessment()` converter",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.3",
       "section": "MLflow Export for Evaluation",
       "description": "Implement `DatasetToRun()` converter for logging",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.4",
       "section": "MLflow Export for Evaluation",
       "description": "Implement `EvaluationResultsToMetrics()` converter",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.5",
       "section": "MLflow Export for Evaluation",
       "description": "Add `WithMLflowExport(client *mlflow.Client, experimentID string)` evaluator option",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.6",
       "section": "MLflow Export for Evaluation",
       "description": "Implement automatic assessment creation on evaluation completion",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.7",
       "section": "MLflow Export for Evaluation",
       "description": "Add unit tests for converter functions",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "7.8",
       "section": "MLflow Export for Evaluation",
       "description": "Write `eval/README.md` section on MLflow integration",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.1",
@@ -676,7 +676,7 @@
       "id": "8.9",
       "section": "Tracing Integration",
       "description": "Implement `Tracer` type with span creation methods (crypto/rand for IDs)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.10",
@@ -688,7 +688,7 @@
       "id": "8.11",
       "section": "Tracing Integration",
       "description": "Implement span hierarchy: Agent → Step → [LLM | Tool]",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.12",
@@ -706,169 +706,169 @@
       "id": "8.14",
       "section": "Tracing Integration",
       "description": "Implement `TracingCallbacks` that implements Fantasy's Callbacks interface",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.15",
       "section": "Tracing Integration",
       "description": "Create `fantasy.WithTracing(config)` agent option in fantasy package (agent.go)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.16",
       "section": "Tracing Integration",
       "description": "Hook OnStepStart/OnStepFinish for step spans",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.17",
       "section": "Tracing Integration",
       "description": "8.8a Hook OnLLMStart/OnLLMFinish for LLM spans",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.18",
       "section": "Tracing Integration",
       "description": "Hook OnToolCall/OnToolResult for tool spans",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.19",
       "section": "Tracing Integration",
       "description": "Implement automatic trace flush on OnAgentFinish (blocking with timeout)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.20",
       "section": "Tracing Integration",
       "description": "Implement thread safety",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.21",
       "section": "Tracing Integration",
       "description": "Implement `SpanFromContext(ctx)` helper to retrieve current span",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.22",
       "section": "Tracing Integration",
       "description": "Implement context cancellation handling",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.23",
       "section": "Tracing Integration",
       "description": "Implement orphan span cleanup",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.24",
       "section": "Tracing Integration",
       "description": "Implement panic recovery in TracingCallbacks",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.25",
       "section": "Tracing Integration",
       "description": "Implement `FlushAll(ctx)` for flushing all pending traces",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.26",
       "section": "Tracing Integration",
       "description": "Implement UTF-8 safe truncation for preview strings",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.27",
       "section": "Tracing Integration",
       "description": "Add unit tests for span generation",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.28",
       "section": "Tracing Integration",
       "description": "Add integration test with real agent execution",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "8.29",
       "section": "Tracing Integration",
       "description": "Write `tracing/README.md` with setup and usage guide",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "9.1",
       "section": "Documentation",
       "description": "Verify `proto/README.md` completeness (from 1.8)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "9.2",
       "section": "Documentation",
       "description": "Verify `mlflow/README.md` completeness (from 3.14)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "9.3",
       "section": "Documentation",
       "description": "Verify `eval/README.md` completeness (from 7.8)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "9.4",
       "section": "Documentation",
       "description": "Verify `tracing/README.md` completeness (from 8.20)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "9.5",
       "section": "Documentation",
       "description": "Update main Fantasy README with MLflow integration section",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "9.6",
       "section": "Documentation",
       "description": "Create comprehensive example in `examples/mlflow/`",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "10.1",
       "section": "Testing and Validation",
       "description": "Run `task lint` and fix any issues",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "10.2",
       "section": "Testing and Validation",
       "description": "Run `task test` and ensure all tests pass",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "10.3",
       "section": "Testing and Validation",
       "description": "Verify proto generation is reproducible",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "10.4",
       "section": "Testing and Validation",
       "description": "Test against local MLflow server (manual end-to-end verification)",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "10.5",
       "section": "Testing and Validation",
       "description": "Test comprehensive example from 9.6",
-      "status": "pending"
+      "status": "completed"
     },
     {
       "id": "10.6",
       "section": "Testing and Validation",
       "description": "Review test coverage for critical paths",
-      "status": "pending"
+      "status": "completed"
     }
   ]
 }
