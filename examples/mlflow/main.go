@@ -65,23 +65,24 @@ func main() {
 
 	// 4. Create provider and model
 	fmt.Printf("\n=== Agent Setup ===\n")
-	provider, err := openai.New(openai.WithAPIKey(apiKey))
+	provider, err := openai.New(openai.WithAPIKey(apiKey), openai.WithBaseURL("https://api.x.ai/v1"))
 	if err != nil {
 		log.Fatalf("Failed to create provider: %v", err)
 	}
 
-	model, err := provider.LanguageModel(ctx, "gpt-4o-mini")
+	modelName := "grok-4-1-fast-reasoning"
+	model, err := provider.LanguageModel(ctx, modelName)
 	if err != nil {
 		log.Fatalf("Failed to create model: %v", err)
 	}
-	fmt.Printf("Model: gpt-4o-mini\n")
+	fmt.Printf("Model: %s\n", modelName)
 
 	// 5. Set up tracing configuration
 	config := tracing.TracingConfig{
 		Client:       client,
 		ExperimentID: experimentID,
 		AgentName:    "math-qa-agent",
-		ModelName:    "gpt-4o-mini",
+		ModelName:    modelName,
 		FlushTimeout: 30 * time.Second,
 		Tags: map[string]string{
 			"example": "mlflow-integration",
@@ -103,15 +104,30 @@ func main() {
 	fmt.Printf("Question: %s\n", question)
 
 	callbacks.OnAgentStart(question)
+	fmt.Printf("Calling agent.Generate()...\n")
 
 	result, err := agent.Generate(ctx, fantasy.AgentCall{
 		Prompt: question,
+		Messages: []fantasy.Message{
+			{
+
+				Role: fantasy.MessageRoleUser,
+				Content: []fantasy.MessagePart{
+					fantasy.TextPart{
+						Text: question,
+					},
+				},
+			},
+		},
 	})
+	fmt.Printf("Agent.Generate() returned: %v\n", err)
 
 	if err != nil {
+		fmt.Printf("onAgentFinish() error: %v\n", err)
 		callbacks.OnAgentFinish(ctx, "")
 		log.Printf("Agent error: %v", err)
 	} else {
+		fmt.Printf("Response: %s\n", result.Response.Content.Text())
 		callbacks.OnAgentFinish(ctx, result.Response.Content.Text())
 		fmt.Printf("Response: %s\n", result.Response.Content.Text())
 	}
@@ -197,7 +213,6 @@ func main() {
 			result, err := agent.Generate(ctx, fantasy.AgentCall{
 				Prompt: question,
 			})
-
 			if err != nil {
 				testCallbacks.OnAgentFinish(ctx, "")
 				return nil, nil, err

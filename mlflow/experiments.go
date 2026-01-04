@@ -77,9 +77,15 @@ func (c *Client) GetExperiment(ctx context.Context, experimentID string) (*pb.Ex
 
 // SearchExperiments searches for experiments matching the given criteria.
 func (c *Client) SearchExperiments(ctx context.Context, opts SearchExperimentsOptions) (*SearchExperimentsResult, error) {
+	// Apply default MaxResults if not set (API requires positive integer)
+	maxResults := opts.MaxResults
+	if maxResults <= 0 {
+		maxResults = 1000 // Default as per MLflow API documentation
+	}
+
 	req := searchExperimentsRequest{
 		Filter:     opts.Filter,
-		MaxResults: opts.MaxResults,
+		MaxResults: maxResults,
 		PageToken:  opts.PageToken,
 		OrderBy:    opts.OrderBy,
 		ViewType:   opts.ViewType,

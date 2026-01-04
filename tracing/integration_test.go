@@ -18,7 +18,7 @@ func TestCallbackFlow(t *testing.T) {
 		Client:       nil, // Will skip actual MLflow upload
 	}
 
-	callbacks := &TracingCallbacks{
+	callbacks := &Callbacks{
 		tracer:       NewTracer(config),
 		experimentID: config.ExperimentID,
 	}
@@ -163,7 +163,7 @@ func TestPanicRecovery(t *testing.T) {
 		ExperimentID: "test-exp",
 	}
 
-	callbacks := &TracingCallbacks{
+	callbacks := &Callbacks{
 		tracer:       NewTracer(config),
 		experimentID: config.ExperimentID,
 	}

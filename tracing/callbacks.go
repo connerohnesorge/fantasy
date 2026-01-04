@@ -11,8 +11,8 @@ import (
 	pb "charm.land/fantasy/proto/gen/mlflow"
 )
 
-// TracingCallbacks implements Fantasy's callback interface for MLflow tracing.
-type TracingCallbacks struct {
+// Callbacks implements Fantasy's callback interface for MLflow tracing.
+type Callbacks struct {
 	tracer       *Tracer
 	client       *mlflow.Client
 	experimentID string
@@ -23,7 +23,7 @@ type TracingCallbacks struct {
 }
 
 // NewTracingCallbacks creates a new tracing callbacks instance.
-func NewTracingCallbacks(config TracingConfig) *TracingCallbacks {
+func NewTracingCallbacks(config TracingConfig) *Callbacks {
 	if config.FlushTimeout == 0 {
 		config.FlushTimeout = 10 * time.Second
 	}
@@ -34,7 +34,7 @@ func NewTracingCallbacks(config TracingConfig) *TracingCallbacks {
 		panic("config.Client must be *mlflow.Client")
 	}
 
-	return &TracingCallbacks{
+	return &Callbacks{
 		tracer:       NewTracer(config),
 		client:       client,
 		experimentID: config.ExperimentID,
@@ -42,7 +42,7 @@ func NewTracingCallbacks(config TracingConfig) *TracingCallbacks {
 }
 
 // OnAgentStart is called when the agent starts execution.
-func (tc *TracingCallbacks) OnAgentStart(request string) {
+func (tc *Callbacks) OnAgentStart(request string) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -54,7 +54,7 @@ func (tc *TracingCallbacks) OnAgentStart(request string) {
 }
 
 // OnAgentFinish is called when the agent finishes execution.
-func (tc *TracingCallbacks) OnAgentFinish(ctx context.Context, response string) error {
+func (tc *Callbacks) OnAgentFinish(ctx context.Context, response string) error {
 	tc.mu.Lock()
 
 	// End the agent span
@@ -85,7 +85,7 @@ func (tc *TracingCallbacks) OnAgentFinish(ctx context.Context, response string) 
 }
 
 // OnStepStart is called when a step starts.
-func (tc *TracingCallbacks) OnStepStart(stepNumber int) error {
+func (tc *Callbacks) OnStepStart(stepNumber int) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -97,7 +97,7 @@ func (tc *TracingCallbacks) OnStepStart(stepNumber int) error {
 }
 
 // OnStepFinish is called when a step finishes.
-func (tc *TracingCallbacks) OnStepFinish() error {
+func (tc *Callbacks) OnStepFinish() error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -110,7 +110,7 @@ func (tc *TracingCallbacks) OnStepFinish() error {
 }
 
 // OnLLMStart is called before an LLM API call.
-func (tc *TracingCallbacks) OnLLMStart(messages []any) error {
+func (tc *Callbacks) OnLLMStart(messages []any) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -127,7 +127,7 @@ func (tc *TracingCallbacks) OnLLMStart(messages []any) error {
 }
 
 // OnLLMFinish is called after an LLM API call completes.
-func (tc *TracingCallbacks) OnLLMFinish(inputTokens, outputTokens, totalTokens int, err error) error {
+func (tc *Callbacks) OnLLMFinish(inputTokens, outputTokens, totalTokens int, err error) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -154,7 +154,7 @@ func (tc *TracingCallbacks) OnLLMFinish(inputTokens, outputTokens, totalTokens i
 }
 
 // OnToolCall is called when a tool is invoked.
-func (tc *TracingCallbacks) OnToolCall(toolName string, input any) error {
+func (tc *Callbacks) OnToolCall(toolName string, input any) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -171,7 +171,7 @@ func (tc *TracingCallbacks) OnToolCall(toolName string, input any) error {
 }
 
 // OnToolResult is called when a tool execution completes.
-func (tc *TracingCallbacks) OnToolResult(result any, err error) error {
+func (tc *Callbacks) OnToolResult(result any, err error) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
@@ -197,14 +197,14 @@ func (tc *TracingCallbacks) OnToolResult(result any, err error) error {
 }
 
 // GetResult returns the tracing result after the agent completes.
-func (tc *TracingCallbacks) GetResult() *TracingResult {
+func (tc *Callbacks) GetResult() *TracingResult {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	return tc.result
 }
 
 // flush uploads the trace to MLflow.
-func (tc *TracingCallbacks) flush(ctx context.Context) error {
+func (tc *Callbacks) flush(ctx context.Context) error {
 	trace := tc.tracer.GetTrace()
 	if trace == nil {
 		return nil
@@ -247,7 +247,7 @@ func (tc *TracingCallbacks) flush(ctx context.Context) error {
 }
 
 // safeCall wraps a callback function with panic recovery.
-func (tc *TracingCallbacks) safeCall(name string, fn func() error) (err error) {
+func (tc *Callbacks) safeCall(name string, fn func() error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in callback %s: %v", name, r)

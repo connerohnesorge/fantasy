@@ -27,11 +27,11 @@ import (
 //
 //	tracingResult := callbacks.GetResult()
 type AgentStreamCallbacksAdapter struct {
-	tc *TracingCallbacks
+	tc *Callbacks
 }
 
 // ToAgentCallbacks converts TracingCallbacks to a Fantasy-compatible adapter.
-func (tc *TracingCallbacks) ToAgentCallbacks() *AgentStreamCallbacksAdapter {
+func (tc *Callbacks) ToAgentCallbacks() *AgentStreamCallbacksAdapter {
 	return &AgentStreamCallbacksAdapter{tc: tc}
 }
 
